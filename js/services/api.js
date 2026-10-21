@@ -386,6 +386,55 @@ class APIService {
     }
 
     /**
+     * Бесплатный перевод (Google → MyMemory → Libre) с авто-фоллбеком
+     */
+    static async freeTranslate(text, from = 'auto', to = 'ru', request_id = null, chain = null) {
+        if (!request_id) {
+            request_id = this.generateRequestId('trans', 'free');
+        }
+        const controller = new AbortController();
+        const signal = controller.signal;
+        runningRequests.set(request_id, controller);
+        try {
+            if (!text || text.trim() === '') {
+                throw new Error('Текст для перевода пуст');
+            }
+            const apiUrl = this.getApiUrl('free/translate');
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, from, to, request_id, chain }),
+                signal
+            });
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return { success: false, error: 'Запрос отменён', cancelled: true };
+            }
+            return { success: false, error: error.message };
+        } finally {
+            if (runningRequests.has(request_id)) runningRequests.delete(request_id);
+        }
+    }
+
+    static async freeBatchTranslate(texts, from = 'auto', to = 'ru', chain = null) {
+        try {
+            if (!Array.isArray(texts) || texts.length === 0) throw new Error('Список текстов пуст');
+            const apiUrl = this.getApiUrl('free/translate/batch');
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ texts, from, to, chain, request_id: this.generateRequestId('trans', 'free') })
+            });
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
      * 批量翻译
      */
     static async batchBaiduTranslate(texts, from = 'auto', to = 'zh') {

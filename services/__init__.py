@@ -2,5 +2,6 @@
 from .baidu import BaiduTranslateService
 from .llm import LLMService
 from .vlm import VisionService
- 
-__all__ = ['BaiduTranslateService', 'LLMService', 'VisionService'] 
+from .free_translate import FreeTranslateService
+
+__all__ = ['BaiduTranslateService', 'LLMService', 'VisionService', 'FreeTranslateService'] 

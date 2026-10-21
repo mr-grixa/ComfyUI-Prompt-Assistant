@@ -4,6 +4,7 @@ from .config_manager import config_manager
 from .services.baidu import BaiduTranslateService
 from .services.llm import LLMService
 from .services.vlm import VisionService
+from .services.free_translate import FreeTranslateService
 from .services.model_list import get_models_from_service
 import base64
 import json
@@ -1207,6 +1208,85 @@ async def baidu_translate(request):
     finally:
         if request_id and request_id in ACTIVE_TASKS:
             del ACTIVE_TASKS[request_id]
+
+# --- Бесплатный перевод с авто-фоллбеком ---
+
+@PromptServer.instance.routes.post(f'{API_PREFIX}/free/translate')
+async def free_translate(request):
+    """
+    Бесплатный перевод (Google → MyMemory → Libre) с авто-переключением.
+    Не требует API ключа.
+    """
+    request_id = None
+    try:
+        data = await request.json()
+        text = data.get("text")
+        from_lang = data.get("from", "auto")
+        to_lang = data.get("to", "ru")
+        request_id = data.get("request_id")
+        chain = data.get("chain", None)  # опционально: список провайдеров
+
+        if not request_id:
+            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+
+        # Языки для логов (русские названия)
+        lang_names = {
+            "auto": "Авто", "zh": "Китайский", "en": "Английский", "zh-TW": "Трад. китайский",
+            "ja": "Японский", "ko": "Корейский", "ar": "Арабский", "es": "Испанский",
+            "fa": "Персидский", "fr": "Французский", "pt-BR": "Португальский", "ru": "Русский", "tr": "Турецкий"
+        }
+        from_lang_name = lang_names.get(from_lang, from_lang)
+        to_lang_name = lang_names.get(to_lang, to_lang)
+        chain_display = "→".join(chain) if chain else "Google→MyMemory→Libre"
+        log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, f"Бесплатный перевод ({chain_display})", None, None, {"方向": f"{from_lang_name}→{to_lang_name}", "长度": len(text) if text else 0})
+
+        task = asyncio.create_task(FreeTranslateService.translate(text, from_lang, to_lang, request_id, chain, task_type=TASK_TRANSLATE, source=SOURCE_FRONTEND))
+        ACTIVE_TASKS[request_id] = task
+
+        result = await task
+        return web.json_response(result)
+    except asyncio.CancelledError:
+        print(f"\r{_ANSI_CLEAR_EOL}{WARN_PREFIX} Бесплатный перевод отменён | ID:{request_id}", flush=True)
+        return web.json_response({"success": False, "error": "请求已取消", "cancelled": True}, status=400)
+    except Exception as e:
+        error_msg = str(e)
+        print(f"{ERROR_PREFIX} Бесплатный перевод ошибка | Ошибка:{error_msg}")
+        return web.json_response({"success": False, "error": error_msg})
+    finally:
+        if request_id and request_id in ACTIVE_TASKS:
+            del ACTIVE_TASKS[request_id]
+
+@PromptServer.instance.routes.post(f'{API_PREFIX}/free/translate/batch')
+async def free_translate_batch(request):
+    """
+    Пакетный бесплатный перевод (для документации узлов и т.п.).
+    Принимает {texts: [...], from, to, chain}
+    """
+    request_id = None
+    try:
+        data = await request.json()
+        texts = data.get("texts", [])
+        from_lang = data.get("from", "auto")
+        to_lang = data.get("to", "ru")
+        request_id = data.get("request_id") or f"free_batch_{int(asyncio.get_event_loop().time())}"
+        chain = data.get("chain", None)
+
+        if not texts or not isinstance(texts, list):
+            return web.json_response({"success": False, "error": "Тексты для перевода не указаны"}, status=400)
+
+        # Используем тот же сервис, но параллельно по чанкам
+        results = []
+        for idx, t in enumerate(texts):
+            sub_id = f"{request_id}_{idx}"
+            res = await FreeTranslateService.translate(t, from_lang, to_lang, sub_id, chain, task_type=TASK_TRANSLATE, source=SOURCE_FRONTEND)
+            if res.get("success"):
+                results.append(res["data"]["translated"])
+            else:
+                results.append(t)  # fallback: возвращаем оригинал
+
+        return web.json_response({"success": True, "data": {"translations": results}})
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/llm/expand')
 async def llm_expand(request):

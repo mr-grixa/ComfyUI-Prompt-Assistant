@@ -9,8 +9,8 @@
         {
             "id": "zhipu",
             "type": "openai_compatible",
-            "name": "智谱",
-            "description": "免费GLM系列模型",
+            "name": "智谱 / Zhipu",
+            "description": "Бесплатные модели GLM (Китай)",
             "base_url": "https://open.bigmodel.cn/api/paas/v4",
             "api_key": "",
             "disable_thinking": true,
@@ -56,8 +56,8 @@
         {
             "id": "xFlow",
             "type": "openai_compatible",
-            "name": "xFlow-API聚合",
-            "description": "免魔法Gemini、Grok、chatGPT...",
+            "name": "xFlow",
+            "description": "Агрегатор Gemini, Grok, ChatGPT",
             "base_url": "https://api.xflow.cc/v1",
             "api_key": "",
             "disable_thinking": true,
@@ -85,10 +85,65 @@
             ]
         },
         {
+            "id": "openrouter",
+            "type": "openai_compatible",
+            "name": "OpenRouter",
+            "description": "Единый доступ к сотням моделей (есть бесплатные)",
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key": "",
+            "disable_thinking": true,
+            "enable_advanced_params": true,
+            "filter_thinking_output": true,
+            "llm_models": [
+                {
+                    "name": "google/gemini-2.0-flash-exp:free",
+                    "display_name": "Gemini 2.0 Flash (free)",
+                    "is_default": true,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "top_p": 0.9
+                },
+                {
+                    "name": "meta-llama/llama-3.3-70b-instruct:free",
+                    "display_name": "Llama 3.3 70B (free)",
+                    "is_default": false,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "top_p": 0.9
+                },
+                {
+                    "name": "qwen/qwen-2.5-72b-instruct:free",
+                    "display_name": "Qwen 2.5 72B (free)",
+                    "is_default": false,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "top_p": 0.9
+                }
+            ],
+            "vlm_models": [
+                {
+                    "name": "google/gemini-2.0-flash-exp:free",
+                    "display_name": "Gemini 2.0 Flash Vision (free)",
+                    "is_default": true,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "top_p": 0.9
+                },
+                {
+                    "name": "qwen/qwen-2-vl-72b-instruct:free",
+                    "display_name": "Qwen2-VL 72B (free)",
+                    "is_default": false,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "top_p": 0.9
+                }
+            ]
+        },
+        {
             "id": "ollama",
             "type": "ollama",
             "name": "Ollama",
-            "description": "调用本地模型",
+            "description": "Локальные модели",
             "base_url": "http://localhost:11434/",
             "api_key": "ollama",
             "auto_unload": true,

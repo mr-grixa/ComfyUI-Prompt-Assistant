@@ -55,8 +55,8 @@ inject_version_to_frontend()
 # 禁用httpx的详细日志，避免打断单行动态显示
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# 打印初始化信息
-print(f"✨提示词小助手 V{VERSION} 已启动")
+# Печать информации о запуске (на русском)
+print(f"✨ Помощник промптов V{VERSION} запущен (ComfyUI Prompt Assistant)")
 
 # =========================================================================
 # ComfyUI V3 API 扩展注册机制
