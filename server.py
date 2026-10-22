@@ -1354,7 +1354,7 @@ async def llm_expand(request):
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/llm/translate')
 async def llm_translate(request):
-    """LLM翻译API"""
+    """LLM翻译API — поддерживает free провайдер с фоллбеком на FreeTranslateService"""
     request_id = None
     try:
         data = await request.json()
@@ -1375,17 +1375,35 @@ async def llm_translate(request):
         prefix = AUTO_TRANSLATE_REQUEST_PREFIX if is_auto else REQUEST_PREFIX
         # 语言显示文字映射
         lang_names = {
-            "auto": "自动检测", "zh": "简体中文", "en": "英文", "zh-TW": "繁体中文", 
-            "ja": "日语", "ko": "韩语", "ar": "阿拉伯语", "es": "西班牙语", 
-            "fa": "波斯语", "fr": "法语", "pt-BR": "葡萄牙语(巴西)", "ru": "俄语", "tr": "土耳其语"
+            "auto": "Авто", "zh": "Китайский", "en": "Английский", "zh-TW": "Трад. китайский", 
+            "ja": "Японский", "ko": "Корейский", "ar": "Арабский", "es": "Испанский", 
+            "fa": "Персидский", "fr": "Французский", "pt-BR": "Португальский", "ru": "Русский", "tr": "Турецкий"
         }
         from_lang_name = lang_names.get(from_lang, from_lang)
         to_lang_name = lang_names.get(to_lang, to_lang)
         
-        # 使用独立的翻译配置
+        # Используем независимую конфигурацию перевода
         translate_config = config_manager.get_translate_config()
+        provider = None
         if translate_config:
             provider = translate_config.get('provider', 'baidu')
+            # Если выбран бесплатный перевод — сразу делегируем FreeTranslateService
+            if provider == 'free':
+                lang_names_free = {
+                    "auto": "Авто", "zh": "Китайский", "en": "Английский", "zh-TW": "Трад. китайский",
+                    "ja": "Японский", "ko": "Корейский", "ar": "Арабский", "es": "Испанский",
+                    "fa": "Персидский", "fr": "Французский", "pt-BR": "Португальский", "ru": "Русский", "tr": "Турецкий"
+                }
+                fl = lang_names_free.get(from_lang, from_lang)
+                tl = lang_names_free.get(to_lang, to_lang)
+                chain = translate_config.get('chain', None)  # опционально
+                chain_display = "→".join(chain) if chain else "Google→MyMemory→Libre→Yandex"
+                log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, f"Бесплатный перевод ({chain_display})", None, None, {"направление": f"{fl}→{tl}", "длина": len(text) if text else 0})
+                task = asyncio.create_task(FreeTranslateService.translate(text, from_lang, to_lang, request_id, chain, task_type=TASK_TRANSLATE, source=SOURCE_FRONTEND))
+                ACTIVE_TASKS[request_id] = task
+                result = await task
+                return web.json_response(result)
+
             model = translate_config.get('model', '')
             provider_display = OpenAICompatibleService.get_provider_display_name(provider)
             
@@ -1396,7 +1414,7 @@ async def llm_translate(request):
             thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
             model_display = format_model_with_thinking(model, bool(thinking_extra))
             
-            log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, provider_display, model_display, None, {"方向": f"{from_lang_name}→{to_lang_name}", "长度": len(text)})
+            log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, provider_display, model_display, None, {"направление": f"{from_lang_name}→{to_lang_name}", "длина": len(text) if text else 0})
 
         # 创建并注册任务
         task = asyncio.create_task(LLMService.translate(
@@ -1810,10 +1828,33 @@ async def llm_translate_stream(request):
         from .utils.common import format_model_with_thinking
         from .services.openai_base import OpenAICompatibleService
         
-        # 使用翻译服务配置（而非LLM配置）
+        # Используем конфигурацию перевода
         translate_config = config_manager.get_translate_config()
+        provider = None
         if translate_config:
             provider = translate_config.get('provider', 'ollama')
+            # Если выбран бесплатный перевод — делаем нестриминговый вызов и имитируем стрим
+            if provider == 'free':
+                chain = translate_config.get('chain', None)
+                chain_display = "→".join(chain) if chain else "Google→MyMemory→Libre→Yandex"
+                log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, f"Бесплатный перевод ({chain_display})", None, f"{from_lang}→{to_lang}", {"длина": len(text) if text else 0})
+                # Fallback к обычному SSE с одним чанком
+                res = await FreeTranslateService.translate(text, from_lang, to_lang, request_id, chain, task_type=TASK_TRANSLATE, source=SOURCE_FRONTEND)
+                if res.get("success"):
+                    translated = res.get("data", {}).get("translated", "")
+                    # Отправляем одним чанком
+                    sse_data = json.dumps({"chunk": translated}, ensure_ascii=False)
+                    await response.write(f"data: {sse_data}\n\n".encode('utf-8'))
+                    done_data = json.dumps({"done": True, "result": res}, ensure_ascii=False)
+                    await response.write(f"data: {done_data}\n\n".encode('utf-8'))
+                    await response.write_eof()
+                    return response
+                else:
+                    error_data = json.dumps({"error": res.get("error", "Free translate failed")}, ensure_ascii=False)
+                    await response.write(f"data: {error_data}\n\n".encode('utf-8'))
+                    await response.write_eof()
+                    return response
+
             model = translate_config.get('model', '')
             provider_display = OpenAICompatibleService.get_provider_display_name(provider)
             
@@ -1823,7 +1864,7 @@ async def llm_translate_stream(request):
             thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
             model_display = format_model_with_thinking(model, bool(thinking_extra))
             
-            log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, provider_display, model_display, f"{from_lang}→{to_lang}", {"长度": len(text)})
+            log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, provider_display, model_display, f"{from_lang}→{to_lang}", {"длина": len(text) if text else 0})
 
         # 用于收集完整内容
         full_content = []

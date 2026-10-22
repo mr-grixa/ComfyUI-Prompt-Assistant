@@ -478,12 +478,12 @@ export async function registerSettings() {
             settings: localizeSettingsPayload([
                 {
                     id: UI_LANGUAGE_SETTING_ID,
-                    name: "界面语言",
-                    category: ["✨提示词小助手", "系统", "界面语言"],
+                    name: "Язык интерфейса",
+                    category: ["✨Помощник промптов", "Система", "Язык интерфейса"],
                     type: "combo",
                     options: LANGUAGE_OPTIONS,
-                    defaultValue: "zh",
-                    tooltip: "切换插件界面语言，修改后自动刷新页面生效",
+                    defaultValue: "ru",
+                    tooltip: "Переключение языка интерфейса плагина, применяется после перезагрузки страницы",
                     onChange: (value) => {
                         const previous = getStoredUiLanguage();
                         const normalized = persistUiLanguage(value);

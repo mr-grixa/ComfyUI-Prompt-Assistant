@@ -2195,26 +2195,39 @@ class PromptAssistant {
                                 let result;
                                 let streamContent = '';  // 用于流式收集内容
                                 try {
-                                    // 获取翻译配置
+                                    // Получаем конфигурацию перевода
                                     const configResp = await fetch(APIService.getApiUrl('/config/translate'));
                                     let isBaidu = false;
+                                    let isFree = false;
 
                                     if (configResp.ok) {
                                         const config = await configResp.json();
-                                        // 检查provider是否为'baidu'
                                         if (config.provider === 'baidu') {
                                             isBaidu = true;
+                                        } else if (config.provider === 'free') {
+                                            isFree = true;
                                         }
                                     }
 
                                     if (isBaidu) {
-                                        // 百度翻译不支持流式，使用原有接口（自动降级）
                                         result = await APIService.baiduTranslate(
                                             contentToTranslate,
                                             langResult.from,
                                             langResult.to,
                                             request_id
                                         );
+                                    } else if (isFree) {
+                                        // Бесплатный перевод — не поддерживает стрим, используем обычный API
+                                        result = await APIService.freeTranslate(
+                                            contentToTranslate,
+                                            langResult.from,
+                                            langResult.to,
+                                            request_id
+                                        );
+                                        // Для совместимости с остальной логикой эмулируем streamContent
+                                        if (result && result.success && result.data) {
+                                            streamContent = result.data.translated || '';
+                                        }
                                     } else if (FEATURES.enableStreaming !== false) {
                                         // ---流式输出：LLM翻译使用流式 API---
                                         result = await APIService.llmTranslateStream(

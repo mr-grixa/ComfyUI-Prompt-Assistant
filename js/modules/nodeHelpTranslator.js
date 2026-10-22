@@ -532,42 +532,56 @@ class NodeHelpTranslator {
             const textsToTranslate = textBlocks.map(block => block.text);
             let translations = [];
             let isBaidu = false;
+            let isFree = false;
 
-            // 1. 获取全局翻译配置
-            // 直接使用后端全局配置（与 PromptAssistant 共享）
             try {
                 const configResp = await fetch(APIService.getApiUrl('/config/translate'));
                 if (configResp.ok) {
                     const config = await configResp.json();
                     if (config.provider === 'baidu') {
                         isBaidu = true;
+                    } else if (config.provider === 'free') {
+                        isFree = true;
                     }
                 }
             } catch (e) {
                 logger.warn(`[NodeHelpTranslator] 获取翻译配置失败: ${e.message}，将默认使用LLM`);
             }
 
-            // 2. 根据服务类型执行翻译
             if (isBaidu) {
-                logger.log(`[NodeHelpTranslator] 使用百度翻译API进行翻译 (${from}->${to})`);
-                // 百度批量翻译是串行请求，返回结果数组
+                logger.log(`[NodeHelpTranslator] Использование Baidu API (${from}->${to})`);
                 const results = await APIService.batchBaiduTranslate(textsToTranslate, from, to);
-
-                // 提取翻译结果，BaiduTranslateService 返回格式需与 LLM 保持一致 (data.translated)
-                // 如果某个请求失败，result.success 为 false，这里暂时填 null 跳过
                 translations = results.map(r => {
                     if (r && r.success && r.data && r.data.translated) {
                         return r.data.translated;
                     }
                     return null;
                 });
-
-                // 检查是否所有翻译都失败了
                 const successCount = translations.filter(t => t !== null).length;
                 if (successCount === 0 && textsToTranslate.length > 0) {
                     throw new Error('所有文本翻译失败 (Baidu)');
                 }
-
+            } else if (isFree) {
+                logger.log(`[NodeHelpTranslator] Использование бесплатного перевода (${from}->${to}) | Блоков:${textsToTranslate.length}`);
+                const result = await APIService.freeBatchTranslate(textsToTranslate, from, to);
+                if (result.success && result.data && result.data.translations) {
+                    translations = result.data.translations;
+                } else if (result.success && result.data && Array.isArray(result.data)) {
+                    translations = result.data;
+                } else {
+                    // fallback: пробуем поштучно
+                    translations = [];
+                    for (const t of textsToTranslate) {
+                        try {
+                            const single = await APIService.freeTranslate(t, from, to);
+                            translations.push(single.success ? (single.data.translated || t) : null);
+                        } catch { translations.push(null); }
+                    }
+                }
+                const successCount = translations.filter(t => t !== null && t !== '').length;
+                if (successCount === 0 && textsToTranslate.length > 0) {
+                    throw new Error('Бесплатный перевод: все блоки не переведены');
+                }
             } else {
                 // ---使用LLM翻译---
                 const textCount = textsToTranslate.length;

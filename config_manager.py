@@ -437,15 +437,13 @@ class ConfigManager:
                 # 这里选择写入表头：
                 with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
                     writer = csv.writer(f)
-                    writer.writerow(["标签名", "标签值"])
+                    writer.writerow(["Название", "Значение"])
                 return True
 
-            # 动态构建表头
-            header = ["标签名", "标签值"]
+            # Динамическое построение заголовка на русском
+            header = ["Название", "Значение"]
             for i in range(max_depth):
-                num_zh = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
-                suffix = num_zh[i] if i < len(num_zh) else str(i + 1)
-                header.append(f"{suffix}级分类")
+                header.append(f"Категория {i+1}")
             
             with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
                 writer = csv.writer(f)
