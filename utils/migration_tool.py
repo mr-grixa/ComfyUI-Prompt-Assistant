@@ -958,24 +958,94 @@ class MigrationTool:
     
     def _write_tags_csv(self, csv_rows, filename):
         """
-        写入 CSV 文件
-        
-        参数:
-            csv_rows: CSV 行数据
-            filename: 文件名
+        Запись CSV файла с тегами.
+        Заголовок на русском для RU-форка.
         """
         csv_path = os.path.join(self.tags_dir, filename)
-        
-        # 确保目录存在
         os.makedirs(self.tags_dir, exist_ok=True)
-        
-        # 写入 CSV 文件（使用 utf-8-sig 编码，兼容 Excel）
         with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            # 写入表头
-            writer.writerow(['标签名', '标签值', '一级分类', '二级分类', '三级分类', '四级分类'])
-            # 写入数据
+            writer.writerow(['Название', 'Значение', 'Категория 1', 'Категория 2', 'Категория 3', 'Категория 4'])
             writer.writerows(csv_rows)
+
+    def _contains_chinese(self, text: str) -> bool:
+        """Проверка наличия китайских иероглифов."""
+        if not text:
+            return False
+        for ch in text:
+            if '\u4e00' <= ch <= '\u9fff':
+                return True
+        return False
+
+    def ensure_tags_localized(self):
+        """
+        Проверяет существующие CSV файлы на наличие китайского.
+        Если файл содержит китайские категории/теги — пересоздаёт его из RU шаблона.
+        Это решает проблему старых установок где в user/default/prompt-assistant/tags/ уже лежит китайский CSV.
+        """
+        try:
+            if not os.path.exists(self.tags_dir):
+                return False
+            template_path = os.path.join(self.plugin_dir, "config", "tags_template.json")
+            if not os.path.exists(template_path):
+                return False
+            # Быстрая проверка: содержит ли шаблон китайский? Если нет — он уже RU и можно использовать для перезаписи.
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template_data = json.load(f)
+            except Exception as e:
+                self._log(f"[теги] Не удалось загрузить шаблон: {e}")
+                return False
+
+            csv_files = [f for f in os.listdir(self.tags_dir) if f.endswith('.csv')]
+            if not csv_files:
+                return False
+
+            updated = False
+            for filename in csv_files:
+                csv_path = os.path.join(self.tags_dir, filename)
+                # Только дефолтный файл должен перезаписываться автоматически.
+                # Пользовательские файлы трогаем только если в названии намёк на дефолт или в них явно китайский.
+                # Для безопасности перезаписываем только "默认标签.csv" и английский "default" варианты.
+                is_default_file = filename in ["默认标签.csv", "default_tags.csv", "tags_default.csv"] or "默认" in filename
+                # Читаем первые 20 строк для проверки
+                has_chinese = False
+                try:
+                    # Пробуем разные кодировки
+                    content = None
+                    for enc in ['utf-8-sig', 'utf-8', 'gbk', 'gb18030']:
+                        try:
+                            with open(csv_path, 'r', encoding=enc) as f:
+                                content = f.read(20000)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    if content and self._contains_chinese(content):
+                        has_chinese = True
+                except Exception:
+                    continue
+
+                if has_chinese and is_default_file:
+                    # Пересоздаём из RU шаблона
+                    try:
+                        csv_rows = []
+                        self._extract_tags_recursive(template_data, [], csv_rows)
+                        if csv_rows:
+                            self._write_tags_csv(csv_rows, filename)
+                            self._log(f"[теги] Обнаружен китайский в {filename} — пересоздан из RU шаблона ({len(csv_rows)} тегов)")
+                            updated = True
+                        else:
+                            self._log(f"[теги] Шаблон пуст, пропуск перезаписи {filename}")
+                    except Exception as e:
+                        self._log(f"[теги] Ошибка перезаписи {filename}: {e}")
+                elif has_chinese and not is_default_file:
+                    # Для пользовательских файлов просто логируем, не трогаем
+                    self._log(f"[теги] В пользовательском файле {filename} обнаружен китайский — пропустите, требуется ручная миграция")
+
+            return updated
+        except Exception as e:
+            self._log(f"[теги] ensure_tags_localized ошибка: {e}")
+            return False
     
     # --- Config.json 迁移 ---
     
@@ -1108,6 +1178,13 @@ def run_migrations(plugin_dir, user_base_dir, logger=None, default_configs=None)
     # 2. 执行旧版 API Key 迁移
     results['config_migration'] = tool.migrate_config_api_keys()
     results['tags_migration'] = tool.migrate_tags_json_to_csv()
+
+    # 2.5 Проверка локализации тегов: если в CSV остался китайский — перезаписать из RU шаблона
+    try:
+        if tool.ensure_tags_localized():
+            results['tags_migration'] = True
+    except Exception:
+        pass
     
     # 3. 执行增量更新（版本比对后按需执行）
     if default_configs:
