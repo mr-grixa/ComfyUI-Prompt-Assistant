@@ -193,6 +193,8 @@ const serviceSelector = {
         // 添加百度翻译选项（仅翻译类型）
         if (config.includeBaidu) {
             options.push({ value: 'baidu', text: tUI('百度翻译') });
+            // Бесплатный перевод с авто-фоллбеком (Google→MyMemory→Libre)
+            options.push({ value: 'free', text: tUI('免费翻译（自动）') });
         }
 
         // 过滤并添加其他服务

@@ -5,15 +5,15 @@ import { APIService } from "../services/api.js";
 export const UI_LANGUAGE_SETTING_ID = "PromptAssistant.Settings.InterfaceLanguage";
 export const UI_LANGUAGE_STORAGE_KEY = "PromptAssistant.Settings.InterfaceLanguage";
 
-const SUPPORTED_LANGUAGES = new Set(["zh", "en", "zh-TW", "ja", "ko", "ar", "es", "fa", "fr", "pt-BR", "ru", "tr"]);
+const SUPPORTED_LANGUAGES = new Set(["ru", "zh", "en", "zh-TW", "ja", "ko", "ar", "es", "fa", "fr", "pt-BR", "tr"]);
 
 export const LANGUAGE_OPTIONS = [
+    { text: "Русский", value: "ru" },
     { text: "简体中文", value: "zh" },
     { text: "English", value: "en" },
     { text: "繁體中文", value: "zh-TW" },
     { text: "日本語", value: "ja" },
     { text: "한국어", value: "ko" },
-    { text: "Русский", value: "ru" },
     { text: "Türkçe", value: "tr" },
     { text: "Español", value: "es" },
     { text: "Français", value: "fr" },
@@ -37,20 +37,20 @@ const DOM_SKIP_SELECTOR = [
     ".model-tag-name"
 ].join(",");
 
-let currentLanguage = "zh";
+let currentLanguage = "ru";
 let currentMessages = {};
 let isToastPatched = false;
 let stopGlobalLocalizationObserver = null;
 
 export function normalizeUiLanguage(value) {
-    return SUPPORTED_LANGUAGES.has(value) ? value : "zh";
+    return SUPPORTED_LANGUAGES.has(value) ? value : "ru";
 }
 
 export function getStoredUiLanguage() {
     try {
-        return normalizeUiLanguage(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) || "zh");
+        return normalizeUiLanguage(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) || "ru");
     } catch {
-        return "zh";
+        return "ru";
     }
 }
 
@@ -106,10 +106,10 @@ export async function ensureUiLocaleLoaded(force = false) {
             LOCALE_CACHE.set(language, await fetchUiLocale(language));
         } catch (error) {
             logger.warn(`[uiI18n] ${error.message}`);
-            if (language !== "zh") {
+            if (language !== "ru") {
                 try {
-                    if (!LOCALE_CACHE.has("zh") || force) {
-                        LOCALE_CACHE.set("zh", await fetchUiLocale("zh"));
+                    if (!LOCALE_CACHE.has("ru") || force) {
+                        LOCALE_CACHE.set("ru", await fetchUiLocale("ru"));
                     }
                 } catch (fallbackError) {
                     logger.warn(`[uiI18n] ${fallbackError.message}`);
@@ -119,7 +119,7 @@ export async function ensureUiLocaleLoaded(force = false) {
     }
 
     currentLanguage = language;
-    currentMessages = LOCALE_CACHE.get(language) || LOCALE_CACHE.get("zh") || {};
+    currentMessages = LOCALE_CACHE.get(language) || LOCALE_CACHE.get("ru") || {};
     return currentMessages;
 }
 

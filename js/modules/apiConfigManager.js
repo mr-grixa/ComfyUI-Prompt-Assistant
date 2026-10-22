@@ -24,7 +24,7 @@ import { tUI } from "../utils/uiI18n.js";
 
 class APIConfigManager {
     // 预置服务商ID列表（不可编辑/删除）
-    static PRESET_SERVICE_IDS = ['zhipu', 'xFlow', 'ollama'];
+    static PRESET_SERVICE_IDS = ['zhipu', 'xFlow', 'ollama', 'openrouter'];
 
     constructor() {
         // 服务商数据
@@ -957,6 +957,20 @@ class APIConfigManager {
                 text: '开通xflow API服务',
                 url: 'https://api.xflow.cc/register?aff=Z063',
                 icon: 'pi-star'
+            });
+        }
+
+        // OpenRouter检测
+        if (searchText.includes('openrouter')) {
+            links.push({
+                text: tUI('开通OpenRouter API服务'),
+                url: 'https://openrouter.ai/keys',
+                icon: 'pi-external-link'
+            });
+            links.push({
+                text: tUI('OpenRouter模型目录'),
+                url: 'https://openrouter.ai/models',
+                icon: 'pi-list'
             });
         }
 

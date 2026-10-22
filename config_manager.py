@@ -825,6 +825,20 @@ class ConfigManager:
                 "top_p": 0.9,
                 "providers": {}
             }
+
+        # Бесплатный перевод (Google → MyMemory → Libre) — не требует API ключа
+        if current_service_id in ['free', 'free_translate', 'google_free', 'yandex_free']:
+            return {
+                "provider": "free",
+                "model": "auto",
+                "base_url": "",
+                "api_key": "",
+                "secret_key": "",
+                "temperature": 0.7,
+                "max_tokens": 1000,
+                "top_p": 0.9,
+                "providers": {}
+            }
         
         # 查找对应的LLM服务
         service = self._get_service_by_id(current_service_id)
@@ -1490,6 +1504,24 @@ class ConfigManager:
                 self._log("设置当前服务商失败: 配置版本过低")
                 return False
             
+            # ---Бесплатный перевод (free) — виртуальный провайдер без модели---
+            if service_id in ['free', 'free_translate', 'google_free', 'yandex_free']:
+                if service_type != 'translate':
+                    self._log(f"设置当前服务商失败: бесплатный перевод поддерживает только translate")
+                    return False
+                if 'current_services' not in config:
+                    config['current_services'] = {}
+                config['current_services'][service_type] = {
+                    "service": "free",
+                    "model": ""
+                }
+                if self.save_config(config):
+                    self._log(f"当前服务商已切换: Бесплатный перевод ({service_type})")
+                    return True
+                else:
+                    self._log("设置当前服务商失败: 保存配置失败")
+                    return False
+
             # ---百度翻译特殊处理---
             # 百度翻译使用独立的baidu_translate配置,不在model_services中
             if service_id == 'baidu':
