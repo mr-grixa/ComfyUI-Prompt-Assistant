@@ -16,6 +16,8 @@ import os
 import sys
 
 import numpy as np
+import torch
+import torch.nn.functional as F
 from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 
@@ -79,6 +81,88 @@ def caption(draw, xy, text, width=None):
     draw.text(xy, text, fill=(235, 235, 235))
 
 
+def degraded_map(region, grid=32, seed=5):
+    """A raw first-step-ish map: holes, noise and a corner attention sink.
+
+    The clean last step map is already good, so nothing needs refining there.
+    What the self attention diffusion is for is this: the spots the word missed,
+    the speckle around it, and the corner cell that every prompt seems to touch.
+    """
+    blob = attention_blob(region)
+    rng = np.random.RandomState(seed)
+    holes = (rng.rand(grid, grid) < 0.25) & (blob > 0.5)
+    blob = blob.copy()
+    blob[holes] = 0.0
+    blob += rng.normal(0.0, 0.05, (grid, grid)).astype(np.float32)
+    blob[grid - 2 :, -2:] += 1.2  # the sink
+    return np.clip(blob, 0.0, None)
+
+
+def figure_guided():
+    """Shows what the self attention diffusion does to a coarse, noisy map.
+
+    The affinity here is built from the image itself - the mean colour of every
+    grid cell - because that is what a self attention block keys on. It is a
+    stand-in for the real thing (no model is run here), but it is built from
+    the picture, not from the ground truth, so the improvement it demonstrates
+    is the operator's, not the answer's.
+    """
+    image, truth = scene()
+    grid = 32
+    cell = SIZE // grid
+    label = "a woman"
+    region = truth[label]
+
+    blob = degraded_map(region)
+    cell_colours = image.reshape(grid, cell, grid, cell, 3).mean((1, 3))
+
+    coordinates = np.stack(np.mgrid[0:grid, 0:grid], -1).reshape(-1, 2) / grid
+    features = np.concatenate(
+        [cell_colours.reshape(grid * grid, 3) * 3.0, coordinates * 1.2], axis=1
+    ).astype(np.float32)
+    distance = ((features[:, None, :] - features[None, :, :]) ** 2).sum(-1)
+    affinity = np.exp(-distance / (2 * 0.35**2))
+    affinity /= affinity.sum(1, keepdims=True)
+
+    stages = [0, 1, 3, 6]
+    panels = [np.repeat(region[..., None] * 0.9, 3, axis=-1)]
+    titles = ["truth"]
+
+    rows = blob.reshape(1, -1)
+    for iterations in stages:
+        if iterations == 0:
+            refined = refine.normalize_rows(rows, "minmax")
+        else:
+            refined = refine.guided_diffuse(
+                rows, affinity, iterations=iterations, mode="otsu", normalize="minmax"
+            )
+        coarse = torch.from_numpy(refined).reshape(1, 1, grid, grid)
+        full = F.interpolate(coarse, size=(SIZE, SIZE), mode="bicubic", align_corners=False)[0, 0].numpy()
+        mask = full > 0.35
+        iou = float((mask & region).sum() / max(1, (mask | region).sum()))
+        print(f"       {label}: {iterations} iteration(s) -> IoU {iou:.3f}")
+        panels.append(refine.overlay(image, np.clip(full, 0, 1), 0.75))
+        titles.append(f"{iterations} pass(es), IoU {iou:.2f}")
+
+    pad, header = 8, 26
+    columns = len(panels)
+    canvas = np.zeros((header + SIZE, columns * (SIZE + pad) + pad, 3), dtype=np.float32)
+    canvas[header:] = 0.09
+    for column, panel in enumerate(panels):
+        x0 = pad + column * (SIZE + pad)
+        canvas[header:, x0 : x0 + SIZE] = panel
+
+    result = Image.fromarray((np.clip(canvas, 0, 1) * 255).astype(np.uint8))
+    draw = ImageDraw.Draw(result)
+    font = ImageFont.load_default()
+    for column, title in enumerate(titles):
+        draw.text((pad + column * (SIZE + pad), 7), title, fill=(235, 235, 235), font=font)
+
+    path = os.path.join(OUT, "guided.png")
+    result.save(path)
+    print(f"wrote {path}")
+
+
 def main():
     image, truth = scene()
     labels = list(truth)
@@ -135,6 +219,7 @@ def main():
         iou = float((mask & real).sum() / max(1, (mask | real).sum()))
         print(f"{label:10s} IoU {iou:.3f}")
     print(f"wrote {path}")
+    figure_guided()
 
 
 if __name__ == "__main__":

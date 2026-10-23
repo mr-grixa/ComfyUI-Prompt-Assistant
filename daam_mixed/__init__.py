@@ -7,6 +7,7 @@ older one the step window and the pixel level mask work.
 """
 
 from .nodes.explorer import DAAMExplorer
+from .nodes.guide import DAAMGuide, DAAMMerge
 from .nodes.mask import DAAMMaskCleanup, DAAMMasks
 from .nodes.sampler import DAAMKSampler, DAAMSamplerCustom
 
@@ -16,6 +17,8 @@ NODE_CLASS_MAPPINGS = {
     "DAAMMasks": DAAMMasks,
     "DAAMMaskCleanup": DAAMMaskCleanup,
     "DAAMExplorer": DAAMExplorer,
+    "DAAMGuide": DAAMGuide,
+    "DAAMMerge": DAAMMerge,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -24,6 +27,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DAAMMasks": "DAAM Masks",
     "DAAMMaskCleanup": "DAAM Mask Cleanup",
     "DAAMExplorer": "DAAM Explorer",
+    "DAAMGuide": "DAAM Guide (steps + self-attention)",
+    "DAAMMerge": "DAAM Merge (multi-seed)",
 }
 
 WEB_DIRECTORY = "./js"

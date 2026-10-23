@@ -128,10 +128,75 @@ def otsu(values):
     return float(centres[int(between.argmax())])
 
 
+def gmm(values, iterations=30, bins=96):
+    """Two component 1D Gaussian mixture by EM; threshold where they cross.
+
+    A DAAM map is close to two populations - the object and everything else -
+    and a single fixed threshold cuts one of them. Otsu answers the same
+    question with a histogram, this one with two gaussians, which behaves
+    better on a map with a long low tail (a word that is barely attended to).
+    """
+    sample = np.asarray(values, dtype=np.float64).ravel()
+    if sample.size == 0:
+        return 0.5
+    if sample.size > 20000:  # EM on a histogram is enough and much faster
+        histogram, edges = np.histogram(np.clip(sample, 0, 1), bins=bins, range=(0, 1))
+        sample = (edges[:-1] + edges[1:]) * 0.5
+        sample = np.repeat(sample, histogram)
+
+    low, high = np.percentile(sample, 25), np.percentile(sample, 75)
+    means = np.array([low, high], dtype=np.float64)
+    deviations = np.array([sample.std(), sample.std()], dtype=np.float64) + 1e-6
+    weights = np.array([0.5, 0.5], dtype=np.float64)
+
+    for _ in range(max(1, int(iterations))):
+        densities = weights / (deviations * np.sqrt(2 * np.pi)) * np.exp(
+            -0.5 * ((sample[:, None] - means) / deviations) ** 2
+        )
+        total = densities.sum(1, keepdims=True)
+        responsibilities = densities / np.maximum(total, 1e-12)
+        mass = responsibilities.sum(0) + 1e-12
+        weights = mass / sample.size
+        means = (responsibilities * sample[:, None]).sum(0) / mass
+        deviations = np.sqrt(
+            (responsibilities * (sample[:, None] - means) ** 2).sum(0) / mass
+        ) + 1e-3
+
+    if means[0] > means[1]:
+        means, deviations, weights = means[::-1], deviations[::-1], weights[::-1]
+
+    # where the two gaussians are equally likely: A x^2 + B x + C = 0
+    sigma1, sigma2 = deviations[0], deviations[1]
+    mu1, mu2 = means[0], means[1]
+    a = 1.0 / sigma2**2 - 1.0 / sigma1**2
+    b = 2.0 * (mu1 / sigma1**2 - mu2 / sigma2**2)
+    c = mu2**2 / sigma2**2 - mu1**2 / sigma1**2 - 2.0 * np.log(sigma1 / sigma2)
+
+    candidates = []
+    if abs(a) < 1e-12:
+        candidates = [-c / b] if abs(b) > 1e-12 else []
+    else:
+        discriminant = b * b - 4 * a * c
+        if discriminant >= 0:
+            root = np.sqrt(discriminant)
+            candidates = [(-b + root) / (2 * a), (-b - root) / (2 * a)]
+
+    inside = [x for x in candidates if mu1 - 1e-6 <= x <= mu2 + 1e-6]
+    if inside:
+        return float(np.clip(min(inside), 0.0, 1.0))
+    if candidates:
+        return float(np.clip(np.clip(min(candidates, key=lambda x: abs(x - (mu1 + mu2) / 2)), 0.0, 1.0), 0.0, 1.0))
+    return float(np.clip((mu1 + mu2) / 2.0, 0.0, 1.0))
+
+
 def threshold_map(values, mode="auto", threshold=0.5, percentile=85.0):
     """The level a pixel has to reach to count as part of the tag."""
     if mode == "fixed":
         return float(np.clip(threshold, 0.0, 1.0))
+    if mode == "gmm":
+        return gmm(values)
+    if mode == "otsu":
+        return float(np.clip(otsu(values), 0.0, 1.0))
     if mode == "percentile":
         return float(np.percentile(values, np.clip(percentile, 1.0, 99.9)))
     # auto: Otsu, kept inside a sane band so a flat or a very peaky map cannot
@@ -261,6 +326,84 @@ def attention_to_mask(
     if keep_main:
         binary = keep_largest(binary)
     return feather(binary, feather_px)
+
+
+# ----------------------------------------------------- guided diffusion
+
+
+def normalize_rows(array, mode="minmax"):
+    """Normalise every row (one token's map) of a (rows, n) array."""
+    array = np.asarray(array, dtype=np.float32)
+    if mode == "none":
+        return array
+    if mode == "zscore":
+        mean = array.mean(1, keepdims=True)
+        spread = array.std(1, keepdims=True)
+        shifted = (array - mean) / np.maximum(spread, 1e-6)
+        return 1.0 / (1.0 + np.exp(-shifted))  # squash to 0..1, monotonic
+    low = array.min(1, keepdims=True)
+    high = array.max(1, keepdims=True)
+    return (array - low) / np.maximum(high - low, 1e-8)
+
+
+def threshold_rows(array, mode="otsu", threshold=0.02, percentile=85.0):
+    """Threshold every row separately, returning the mask of what survives."""
+    array = np.asarray(array, dtype=np.float32)
+    keep = np.zeros_like(array, dtype=bool)
+    for index in range(array.shape[0]):
+        row = array[index]
+        level = threshold_map(row, mode=mode, threshold=threshold, percentile=percentile)
+        keep[index] = row >= level
+    return keep
+
+
+def guided_diffuse(
+    maps,
+    affinity,
+    iterations=3,
+    mode="otsu",
+    threshold=0.02,
+    percentile=85.0,
+    normalize="minmax",
+    blend=1.0,
+):
+    """Refine token maps by letting them spread along the self attention graph.
+
+    ``maps`` is (tokens, hw) on the same grid as ``affinity``, which is
+    (hw, hw) and row stochastic: row i holds how much pixel i looks at every
+    other pixel. Multiplying a map by it makes every pixel take the average of
+    the map over what it attends to - inside the object that average is the
+    object's own value, across an edge it is not, so the region tightens with
+    every iteration. After each pass the row is renormalised and everything
+    below the threshold is dropped, which is what stops the map from creeping
+    over the whole image.
+
+    ``blend`` mixes the result with the untouched map: 1 is fully refined.
+    """
+    original = np.asarray(maps, dtype=np.float32)
+    if affinity is None or iterations <= 0:
+        return original
+
+    affinity = np.asarray(affinity, dtype=np.float32)
+    if affinity.shape[0] != original.shape[1]:
+        raise ValueError(
+            f"[DAAM] the self attention map is {affinity.shape[0]} cells but the "
+            f"token maps have {original.shape[1]}; capture both at the same level"
+        )
+
+    current = original.copy()
+    for _ in range(int(iterations)):
+        current = current @ affinity
+        current = normalize_rows(current, normalize)
+        if mode == "none":
+            continue
+        keep = threshold_rows(current, mode=mode, threshold=threshold, percentile=percentile)
+        current = current * keep
+
+    if blend >= 1.0:
+        return np.clip(current, 0.0, 1.0)
+    mixed = float(blend) * current + (1.0 - float(blend)) * normalize_rows(original, normalize)
+    return np.clip(mixed, 0.0, 1.0)
 
 
 def overlay(image, mask, strength=0.6):

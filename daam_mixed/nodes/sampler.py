@@ -29,6 +29,65 @@ try:
 except Exception:  # pragma: no cover - ComfyUI always ships it
     latent_preview = None
 
+ANALYSIS_INPUTS = {
+    "head_aggregation": (
+        ["mean", "median", "max", "min_entropy"],
+        {
+            "default": "min_entropy",
+            "tooltip": (
+                "How the attention heads of a layer are merged. min_entropy keeps "
+                "the most concentrated quarter of the heads, which is what removes "
+                "the fog of heads staring at the background."
+            ),
+        },
+    ),
+    "value_norm": (
+        "BOOLEAN",
+        {
+            "default": True,
+            "tooltip": (
+                "Scale each token's map by the norm of its value vector: padding "
+                "and end-of-prompt tokens carry near-zero values and are pushed down."
+            ),
+        },
+    ),
+    "keep_per_step": (
+        "BOOLEAN",
+        {
+            "default": True,
+            "tooltip": (
+                "Keep a map per recorded step (about 1.3 MB per step). Needed for "
+                "SNR weighting in DAAM Guide and for looking at a single step."
+            ),
+        },
+    ),
+    "capture_self": (
+        "BOOLEAN",
+        {
+            "default": False,
+            "tooltip": (
+                "Also record self attention affinity, which DAAM Guide needs to "
+                "refine masks past the 16px grid. Costs the fused kernel for those "
+                "blocks, so it is off by default."
+            ),
+        },
+    ),
+    "self_level": (
+        ["secondary", "primary", "combined"],
+        {
+            "default": "secondary",
+            "tooltip": (
+                "secondary is latent/4 (cheap, many blocks), primary is latent/2 "
+                "(sharp, few blocks), combined blends them."
+            ),
+        },
+    ),
+    "self_blend": (
+        "FLOAT",
+        {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05, "tooltip": "primary share in combined."},
+    ),
+}
+
 CAPTURE_INPUTS = {
     "capture_last_steps": (
         "INT",
@@ -131,6 +190,7 @@ class DAAMKSampler:
                     {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
                 ),
                 **CAPTURE_INPUTS,
+                **ANALYSIS_INPUTS,
             },
             "hidden": {"prompt": "PROMPT", "node_id": "UNIQUE_ID"},
         }
@@ -164,6 +224,12 @@ class DAAMKSampler:
         denoise,
         capture_last_steps,
         capture_end_offset,
+        head_aggregation,
+        value_norm,
+        keep_per_step,
+        capture_self,
+        self_level,
+        self_blend,
         prompt=None,
         node_id=None,
     ):
@@ -181,6 +247,12 @@ class DAAMKSampler:
             collect_neg=collect_neg,
             capture_last_steps=capture_last_steps,
             capture_end_offset=capture_end_offset,
+            head_aggregation=head_aggregation,
+            value_norm=value_norm,
+            keep_per_step=keep_per_step,
+            capture_self=capture_self,
+            self_level=self_level,
+            self_blend=self_blend,
         )
 
         working, keys = (model, [])
@@ -246,6 +318,7 @@ class DAAMSamplerCustom:
                 "sigmas": ("SIGMAS", {}),
                 "latent_image": ("LATENT", {}),
                 **CAPTURE_INPUTS,
+                **ANALYSIS_INPUTS,
             },
             "hidden": {"prompt": "PROMPT", "node_id": "UNIQUE_ID"},
         }
@@ -272,6 +345,12 @@ class DAAMSamplerCustom:
         latent_image,
         capture_last_steps,
         capture_end_offset,
+        head_aggregation,
+        value_norm,
+        keep_per_step,
+        capture_self,
+        self_level,
+        self_blend,
         prompt=None,
         node_id=None,
     ):
@@ -291,6 +370,12 @@ class DAAMSamplerCustom:
             collect_neg=collect_neg,
             capture_last_steps=capture_last_steps,
             capture_end_offset=capture_end_offset,
+            head_aggregation=head_aggregation,
+            value_norm=value_norm,
+            keep_per_step=keep_per_step,
+            capture_self=capture_self,
+            self_level=self_level,
+            self_blend=self_blend,
         )
 
         working, keys = (model, [])

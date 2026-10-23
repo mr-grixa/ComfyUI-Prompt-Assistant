@@ -73,12 +73,14 @@ class DAAMMasks:
                 ),
                 "side": (["positive", "negative"], {"default": "positive"}),
                 "threshold_mode": (
-                    ["auto", "fixed", "percentile"],
+                    ["auto", "otsu", "gmm", "fixed", "percentile"],
                     {
                         "default": "auto",
                         "tooltip": (
-                            "auto: Otsu, kept in a sane band. fixed: threshold. "
-                            "percentile: relative to the map's own distribution."
+                            "auto: Otsu, kept in a sane band. otsu: plain Otsu. "
+                            "gmm: two gaussian mixture, better on maps with a long "
+                            "low tail. fixed: threshold. percentile: relative to "
+                            "the map's own distribution."
                         ),
                     },
                 ),

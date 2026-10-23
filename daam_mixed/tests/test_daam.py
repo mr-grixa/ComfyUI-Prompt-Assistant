@@ -85,11 +85,15 @@ class FakePatcher:
 
     @property
     def patches(self):
-        return self.model_options["transformer_options"]["patches_replace"]["attn2"]
+        return self.patches_for("attn2")
+
+    def patches_for(self, kind):
+        replace = self.model_options["transformer_options"]["patches_replace"]
+        return replace.setdefault(kind, {})
 
     def set_model_patch_replace(self, patch, name, block_name, number, transformer_index=None):
         if patch is not None:
-            self.patches[(block_name, number, transformer_index)] = patch
+            self.patches_for(name)[(block_name, number, transformer_index)] = patch
 
     def clone(self):
         return FakePatcher(self.model.diffusion_model)
@@ -189,7 +193,8 @@ def test_capture_window():
         f"{stub_attention.CALLS['optimized']} pass-through calls",
     )
 
-    maps = collector.heatmaps("pos")
+    payload = collector.heatmaps("pos")
+    maps = payload["pos"]
     check("heat map for the batch entry", 0 in maps)
     check("one token count", list(maps[0]) == [5], str(list(maps[0])))
     heat = maps[0][5]
@@ -202,7 +207,7 @@ def test_capture_window():
     expected = (np.arange(256) % 5 == 0).reshape(16, 16)
     check("token lands on its own pixels", np.abs(token0 - expected).max() < 1e-4, f"max diff {np.abs(token0 - expected).max():.4f}")
 
-    check("neg side was not collected", collector.heatmaps("neg") == {})
+    check("neg side was not collected", collector.heatmaps("neg")["neg"] == {})
     remove_attention_capture(patcher, keys)
     check("unpatch removes every block", patcher.patches == {}, f"{len(patcher.patches)} left")
 
@@ -224,7 +229,7 @@ def test_nested_blocks():
         ("middle", 0, 0), ("middle", 0, 1),
         ("output", 0, 0), ("output", 0, 1),
     ]
-    found = list(keys)
+    found = [key[:3] for key in keys]
     check("nested blocks give the lookup keys", found == expected, str(found))
     check("blocks without attention are skipped", ("input", 1, 0) not in found)
     check("the patch keys land in model options",
@@ -285,8 +290,8 @@ def test_cond_uncond_and_grids():
         for patch in list(patcher.patches.values()):
             patch(small_q, k, k, extra)
 
-    pos = collector.heatmaps("pos")[0][5]
-    neg = collector.heatmaps("neg")[0][5]
+    pos = collector.heatmaps("pos")["pos"][0][5]
+    neg = collector.heatmaps("neg")["neg"][0][5]
     check("pos and neg are separated", pos is not None and neg is not None)
     check("merged grid is the finest", tuple(pos.shape) == (5, 16, 16), str(tuple(pos.shape)))
     check("positive row is the pos map", float(pos[0].mean()) > 0.5 and float(pos[1].mean()) < 0.1,
@@ -556,7 +561,7 @@ def test_node_schemas():
 
     package = importlib.import_module("daam_mixed")
     mapping = package.NODE_CLASS_MAPPINGS
-    check("node classes registered", len(mapping) == 5, str(sorted(mapping)))
+    check("node classes registered", len(mapping) == 7, str(sorted(mapping)))
     check("every node has a display name", set(mapping) == set(package.NODE_DISPLAY_NAME_MAPPINGS))
 
     for name, node in mapping.items():
@@ -591,6 +596,293 @@ def test_node_schemas():
         check(f"{relative} ships", os.path.isfile(path), path)
 
 
+
+# ------------------------------------------------------- the diploma features
+
+
+def test_head_aggregation():
+    from daam_mixed.core.heads import aggregate_heads, apply_value_norm, head_entropy
+
+    heads, queries, keys = 4, 16, 5
+    probs = torch.full((1, heads, queries, keys), 1.0 / keys)
+    probs[0, 0, :, :] = 0.0
+    probs[0, 0, :, 2] = 1.0  # a focused head
+    probs[0, 3, :, :4] = 0.1 / 4
+    probs[0, 3, :, 4] = 0.9  # a head that spills onto another token
+
+    entropy = head_entropy(probs)
+    check("entropy is lowest for the focused head", int(entropy.argmin()) == 0, str(entropy.tolist()))
+
+    mean = aggregate_heads(probs, "mean")
+    focused = aggregate_heads(probs, "min_entropy")
+    check(
+        "min_entropy keeps the focused head",
+        float(focused[0, :, 2].mean()) > 0.6,
+        f"{float(focused[0, :, 2].mean()):.2f}",
+    )
+    check(
+        "plain mean dilutes it",
+        float(mean[0, :, 2].mean()) < 0.45,
+        f"{float(mean[0, :, 2].mean()):.2f}",
+    )
+    for method in ("mean", "median", "max", "min_entropy"):
+        merged = aggregate_heads(probs, method)
+        check(
+            f"{method}: rows stay normalised",
+            abs(float(merged.sum(-1).mean()) - 1.0) < 1e-5,
+            str(float(merged.sum(-1).mean())),
+        )
+
+    value = torch.ones(1, keys, 8)
+    value[0, 4, :] = 0.01  # an empty token, like padding
+    scaled = apply_value_norm(mean, value)
+    check(
+        "value norm pushes the empty token down",
+        float(scaled[0, :, 4].mean()) < float(mean[0, :, 4].mean()) * 0.2,
+        f"{float(scaled[0, :, 4].mean()):.4f} vs {float(mean[0, :, 4].mean()):.3f}",
+    )
+    check(
+        "value norm keeps the map normalised",
+        abs(float(scaled.sum(-1).mean()) - 1.0) < 1e-5,
+        str(float(scaled.sum(-1).mean())),
+    )
+
+
+def drive_token(patcher, sigmas, step, token, latent=(32, 32), heads=1, dim=8, batch=1):
+    """One UNet call whose queries all look at a single prompt token."""
+    grid_side = latent[0] // 2
+    q_len = grid_side * grid_side
+    seeds = one_hot_vectors(dim, 5)
+    q = torch.zeros(batch, q_len, heads * dim)
+    q[:, :, :dim] = seeds[token] * 8.0
+    k = torch.zeros(batch, 5, heads * dim)
+    k[:, :, :dim] = seeds * 8.0
+    extra = {
+        "n_heads": heads,
+        "sigmas": sigmas[step : step + 1],
+        "sample_sigmas": sigmas,
+        "cond_or_uncond": [0] * batch,
+    }
+    for patch in list(patcher.patches.values()):
+        patch(q, k, k, extra)
+
+
+def test_per_step_capture_and_snr():
+    from daam_mixed.core.aggregate import side_maps, step_weights
+
+    sigmas = torch.linspace(14.0, 0.0, 21)
+    late_steps = [16, 17, 18, 19]
+    collector = AttentionCollector(32, 32, capture_last_steps=0, keep_per_step=True)
+    patcher = FakePatcher()
+    install_attention_capture(patcher, collector)
+    for order, step in enumerate(late_steps):
+        drive_token(patcher, sigmas, step, order)  # token 0 at step 16 ... token 3 at step 19
+
+    payload = collector.heatmaps("pos")
+    check("per step maps are kept", len(payload.get("steps") or {}) == 4, str(sorted(payload.get("steps") or {})))
+    check("the schedule is shipped with the maps", len((payload.get("sigmas") or {}).get("schedule") or []) == 21)
+
+    default = side_maps(payload, "pos", "none")
+    means = [float(default[0][5][token].mean()) for token in range(4)]
+    check("without weighting every step counts the same", all(abs(value - 0.25) < 0.02 for value in means),
+          " ".join(f"{value:.2f}" for value in means))
+    check(
+        "each step keeps its own map",
+        abs(float(payload["steps"][16][0][5][0].mean()) - 1.0) < 1e-5,
+        str(float(payload["steps"][16][0][5][0].mean())),
+    )
+
+    weights = step_weights(payload["sigmas"]["schedule"], payload["steps"].keys(), "inverse_sigma_squared")
+    check("SNR weights sum to one", abs(sum(weights.values()) - 1.0) < 1e-6, str(weights))
+    ordered = [weights[step] for step in sorted(weights)]
+    check("SNR weights grow with the step", ordered == sorted(ordered), str([round(v, 3) for v in ordered]))
+    check("the last step dominates the weighting", weights[19] > 0.5, f"{weights[19]:.3f}")
+
+    weighted = side_maps(payload, "pos", "inverse_sigma")
+    check("weighted maps keep the token rows", set(weighted[0]) == {5}, str(set(weighted[0])))
+    late = float(weighted[0][5][3].mean())
+    early = float(weighted[0][5][0].mean())
+    check("weighted maps lean on the late steps", late > early * 2, f"token3 {late:.3f} vs token0 {early:.3f}")
+
+
+def test_self_attention_capture():
+    collector = AttentionCollector(
+        32, 32, capture_self=True, self_level="secondary", keep_per_step=True
+    )
+    patcher = FakePatcher()
+    install_attention_capture(patcher, collector)
+    check(
+        "attn1 is patched too",
+        len(patcher.patches_for("attn1")) == len(patcher.patches_for("attn2")) > 0,
+        str(len(patcher.patches_for("attn1"))),
+    )
+    check(
+        "a self attention patch is bound to this collector",
+        all(getattr(patch, "__self__", None) is collector for patch in patcher.patches_for("attn1").values()),
+    )
+
+    # 8x8 = 64 cells; the first half and the second half share a direction
+    cells, dim = 64, 8
+    direction = torch.zeros(cells, dim)
+    direction[:32, 0] = 1.0
+    direction[32:, 1] = 1.0
+    q = (direction * 6.0)[None]
+    v = direction[None]
+
+    out = collector.attn1(q, q, v, {"n_heads": 1, "cond_or_uncond": [0]})
+    check("self attention still returns the output", tuple(out.shape) == (1, cells, dim), str(tuple(out.shape)))
+
+    payload = collector.heatmaps("pos")
+    affinity = (payload.get("self") or {}).get("secondary", {}).get(0)
+    check("affinity was captured", affinity is not None)
+    if affinity is None:
+        return
+
+    check("affinity is square on the secondary grid", tuple(affinity.shape) == (cells, cells), str(tuple(affinity.shape)))
+    check(
+        "affinity rows are distributions",
+        abs(float(affinity.sum(-1).mean()) - 1.0) < 1e-4,
+        str(float(affinity.sum(-1).mean())),
+    )
+    inside = float(affinity[:32, :32].sum(-1).mean())
+    across = float(affinity[:32, 32:].sum(-1).mean())
+    check("affinity stays inside the region", inside > 0.99 and across < 0.01, f"{inside:.3f} / {across:.3f}")
+
+
+def test_guided_diffusion():
+    from scipy import ndimage
+
+    grid = 16
+    centre = (grid - 1) / 2
+    ys, xs = np.mgrid[0:grid, 0:grid]
+    truth = (((ys - centre) ** 2 + (xs - centre) ** 2) <= 5.5**2).astype(np.float32)
+
+    rng = np.random.RandomState(3)
+    noisy = ndimage.gaussian_filter(truth, 1.2) + rng.normal(0.0, 0.18, (grid, grid))
+    noisy = np.clip(noisy, 0.0, 1.0).ravel()
+
+    coordinates = np.stack(np.mgrid[0:grid, 0:grid], -1).reshape(-1, 2).astype(np.float32)
+    distance = ((coordinates[:, None, :] - coordinates[None, :, :]) ** 2).sum(-1)
+    same = (truth.ravel()[:, None] == truth.ravel()[None, :]).astype(np.float32)
+    affinity = np.exp(-distance / (2 * 3.0**2)) * (1 + 1.5 * same)
+    affinity /= affinity.sum(1, keepdims=True)
+
+    def iou(values):
+        level = refine.threshold_map(values, "gmm")
+        predicted = values >= level
+        real = truth.ravel() > 0.5
+        return float((predicted & real).sum() / max(1, (predicted | real).sum()))
+
+    before = iou(noisy)
+    after = iou(refine.guided_diffuse(noisy[None], affinity, iterations=3, mode="gmm")[0])
+    print(f"       guided diffusion IoU {before:.3f} -> {after:.3f}")
+    check("guided diffusion sharpens a noisy map", after > before + 0.15, f"{before:.3f} -> {after:.3f}")
+    check("guided diffusion ends near the truth", after > 0.85, f"{after:.3f}")
+
+    blended = refine.guided_diffuse(noisy[None], affinity, iterations=3, mode="gmm", blend=0.0)[0]
+    check(
+        "blend 0 leaves the map alone",
+        np.allclose(blended, refine.normalize_rows(noisy[None], "minmax")[0], atol=1e-5),
+    )
+    check(
+        "iterations 0 changes nothing",
+        np.allclose(refine.guided_diffuse(noisy[None], affinity, iterations=0)[0], noisy[None][0], atol=1e-6),
+    )
+
+    for mode in ("otsu", "gmm", "fixed"):
+        level = refine.threshold_map(np.clip(noisy, 0, 1), mode, threshold=0.4)
+        check(f"threshold mode {mode} is in range", 0.0 <= level <= 1.0, str(level))
+    bimodal = np.concatenate([rng.rand(2000) * 0.12, 0.7 + rng.rand(1000) * 0.25])
+    level = refine.gmm(bimodal)
+    check("gmm splits a bimodal map", 0.2 < level < 0.6, f"{level:.3f}")
+
+
+def _guide_payload(grid=8, tokens=5, seed=5):
+    """A payload shaped like the sampler's, with a self attention affinity."""
+    rng = np.random.RandomState(seed)
+    truth = np.zeros((grid, grid), dtype=np.float32)
+    truth[:, : grid // 2] = 1.0
+    maps = np.stack([truth * (0.2 + 0.6 * rng.rand()) for _ in range(tokens)])
+    maps += rng.normal(0.0, 0.05, maps.shape).astype(np.float32)
+    maps = np.clip(maps, 0.0, 1.0)
+
+    flat = truth.ravel()
+    same = (flat[:, None] == flat[None, :]).astype(np.float32)
+    affinity = 0.7 * same + 0.3 * (1.0 / flat.size)
+    affinity /= affinity.sum(1, keepdims=True)
+
+    return {
+        "pos": {0: {tokens: torch.from_numpy(maps)}},
+        "steps": {
+            0: {0: {tokens: torch.from_numpy(maps * 0.5)}},
+            1: {0: {tokens: torch.from_numpy(np.clip(maps * 1.2, 0, 1))}},
+        },
+        "sigmas": {"schedule": [14.0, 1.0, 0.0]},
+        "self": {"secondary": {0: torch.from_numpy(affinity)}, "grids": {"secondary": (grid, grid)}},
+    }
+
+
+def test_guide_node():
+    from daam_mixed.nodes.guide import DAAMGuide
+
+    payload = _guide_payload()
+    node = DAAMGuide()
+    refined, report = node.guide(
+        heatmaps=payload,
+        step_weighting="inverse_sigma_squared",
+        self_level="secondary",
+        iterations=3,
+        threshold_mode="gmm",
+        threshold=0.02,
+        percentile=85.0,
+        normalize="minmax",
+        blend=1.0,
+        batch_index=0,
+    )
+    check("guide keeps the payload shape", set(refined) == {"pos"}, str(set(refined)))
+    maps = refined["pos"][0][5]
+    check("guide keeps the token axis", tuple(maps.shape) == (5, 8, 8), str(tuple(maps.shape)))
+    check("guide returns values in range", float(maps.min()) >= 0.0 and float(maps.max()) <= 1.0)
+    print(f"       guide report: {report}")
+
+    left = float(maps[0][:, :4].mean())
+    right = float(maps[0][:, 4:].mean())
+    check("guide sharpened the split", left > right * 3, f"{left:.3f} vs {right:.3f}")
+
+    off, report_off = node.guide(
+        heatmaps=payload,
+        step_weighting="none",
+        self_level="off",
+        iterations=5,
+        threshold_mode="gmm",
+        threshold=0.02,
+        percentile=85.0,
+        normalize="minmax",
+        blend=1.0,
+        batch_index=0,
+    )
+    original = payload["pos"][0][5]
+    check("without self attention the maps pass through", torch.allclose(off["pos"][0][5], original, atol=1e-6))
+    check("the report says why", "no self-attention" in report_off, report_off)
+
+
+def test_merge_node():
+    from daam_mixed.nodes.guide import DAAMMerge
+
+    first = _guide_payload(seed=1)
+    second = _guide_payload(seed=2)
+    node = DAAMMerge()
+
+    mean_maps, report = node.merge(first, second, "mean")
+    expected = (first["pos"][0][5] + second["pos"][0][5]) / 2.0
+    check("merge averages the runs", torch.allclose(mean_maps["pos"][0][5], expected, atol=1e-6), report)
+
+    third = _guide_payload(seed=3)
+    median_maps, _ = node.merge(first, second, "median", third)
+    stacked = torch.stack([first["pos"][0][5], second["pos"][0][5], third["pos"][0][5]])
+    check("merge takes the median", torch.allclose(median_maps["pos"][0][5], stacked.median(0).values, atol=1e-6))
+
+
 def main():
     test_node_schemas()
     test_capture_window()
@@ -602,6 +894,12 @@ def main():
     test_refine_precision()
     test_mask_node()
     test_soft_and_cleanup()
+    test_head_aggregation()
+    test_per_step_capture_and_snr()
+    test_self_attention_capture()
+    test_guided_diffusion()
+    test_guide_node()
+    test_merge_node()
 
     failed = [name for name, ok, _ in results if not ok]
     print()
