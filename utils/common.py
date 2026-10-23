@@ -24,7 +24,7 @@ if sys.platform == 'win32' and sys.stdout.encoding != 'utf-8':
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
     except Exception:
-        pass  # 静默失败，保持原有编码
+        pass  # 静默 ошибка，保持原有编码
 
 
 # ==================== 统一显示宽度计算 ====================
@@ -54,15 +54,15 @@ WARN_PREFIX = "✨-⚠️"
 
 
 # ==================== 任务类型常量 ====================
-TASK_TRANSLATE = "翻译"
-TASK_EXPAND = "提示词优化"
-TASK_IMAGE_CAPTION = "图像反推"
-TASK_VIDEO_CAPTION = "视频反推"
+TASK_TRANSLATE = "Перевод"
+TASK_EXPAND = "Расширение"
+TASK_IMAGE_CAPTION = "Описание изображения"
+TASK_VIDEO_CAPTION = "Описание видео"
 
 
 # ==================== 请求来源常量 ====================
-SOURCE_NODE = "节点-"
-SOURCE_FRONTEND = "前端-"
+SOURCE_NODE = "Нода-"
+SOURCE_FRONTEND = "Фронтенд-"
 
 
 # ==================== 统一日志消息函数 ====================
@@ -77,20 +77,20 @@ def log_prepare(
     extra: dict = None
 ) -> None:
     """
-    输出统一格式的准备日志（换行输出）
+    输出统一格式的 подготовка日志（换行输出）
     
-    格式: ✨ 🟡 {来源}{任务}准备 | 服务:{service} | 模型:{model} | 规则:{rule} | ID:{id}
+    格式: ✨ 🟡 {来源}{任务} подготовка | сервис:{service} | модель:{model} | правило:{rule} | ID:{id}
     """
     # 强制回到行首并清除当前行，确保不与之前的 progress 冲突
     print(f"\r{_ANSI_CLEAR_EOL}", end="")
     
-    parts = [f"{PREFIX} 🟡 {source}{task_type}准备"]
-    parts.append(f"服务:{service_name}")
+    parts = [f"{PREFIX} 🟡 {source}{task_type} подготовка"]
+    parts.append(f"сервис:{service_name}")
     
     if model_name:
-        parts.append(f"模型:{model_name}")
+        parts.append(f"модель:{model_name}")
     if rule_name:
-        parts.append(f"规则:{rule_name}")
+        parts.append(f"правило:{rule_name}")
     
     parts.append(f"ID:{request_id}")
     
@@ -112,24 +112,24 @@ def log_complete(
     source: str = None
 ) -> None:
     """
-    输出统一格式的完成日志（换行输出）
+    输出统一格式的 завершён日志（换行输出）
     
-    格式: ✨ ✅ {来源}{任务}完成 | 服务:{service} | ID:{id} | 字符:{count} | 耗时:{time}
+    格式: ✨ ✅ {来源}{任务} завершён | сервис:{service} | ID:{id} | символов:{count} | время:{time}
     """
     # 强制回到行首且不换行清空当前行，然后输出新消息
     print(f"\r{_ANSI_CLEAR_EOL}", end="")
     
     elapsed_str = format_elapsed_time(elapsed_ms)
     source_str = source if source else ""
-    parts = [f"{PREFIX} ✅ {source_str}{task_type}完成"]
-    parts.append(f"服务:{service_name}")
+    parts = [f"{PREFIX} ✅ {source_str}{task_type} завершён"]
+    parts.append(f"сервис:{service_name}")
     parts.append(f"ID:{request_id}")
-    parts.append(f"字符:{char_count}")
-    parts.append(f"耗时:{elapsed_str}")
+    parts.append(f"символов:{char_count}")
+    parts.append(f"время:{elapsed_str}")
     
     # Ollama 模型卸载状态
     if model_unloaded is not None:
-        unload_text = "模型已卸载" if model_unloaded else "模型保留"
+        unload_text = "модель выгружена" if model_unloaded else "модель оставлена"
         parts.append(unload_text)
     
     print(f"{parts[0]} | {' | '.join(parts[1:])}", flush=True)
@@ -147,7 +147,7 @@ def log_error(
     # 强制回到行首并清除当前行
     print(f"\r{_ANSI_CLEAR_EOL}", end="")
     source_str = source if source else ""
-    print(f"{PREFIX} ❌ {source_str}{task_type}失败 | ID:{request_id} | 错误:{error_msg}", flush=True)
+    print(f"{PREFIX} ❌ {source_str}{task_type} ошибка | ID:{request_id} | ошибка:{error_msg}", flush=True)
 
 
 def generate_request_id(req_type: str, service_type: Optional[str] = None, node_id: str = "0") -> str:
@@ -254,10 +254,10 @@ class ProgressBar:
     """
     统一进度条管理器
     
-    管理请求的完整生命周期：等待 → 生成 → 完成
+    管理请求的完整生命周期：Ожидание → 生成 →  завершён
     通过 streaming 参数控制刷新频率：
     - streaming=True: 高频刷新（每次更新都刷新）
-    - streaming=False: 仅在状态变化时刷新（等待→生成→完成）
+    - streaming=False: 仅在状态变化时刷新（Ожидание→生成→ завершён）
     
     两种模式都使用单行覆盖（\r），区别仅在于刷新频率
     """
@@ -306,7 +306,7 @@ class ProgressBar:
             global _global_last_output_len
             _global_last_output_len = 0
         
-        # 立即显示"等待响应"
+        # 立即显示"Ожиданиеответа"
         self._refresh(force=True)
         
         # 仅在流式模式下启动定时刷新线程（非流式模式采用静态日志，无需跳秒刷新）
@@ -329,9 +329,9 @@ class ProgressBar:
         elapsed = self._format_elapsed()
         
         if self._state == self.STATE_WAITING:
-            # 等待响应：✨ 🟠 等待Ollama响应...
+            # Ожиданиеответа：✨ 🟠 ОжиданиеOllamaответа...
             # 流式模式下添加计时，非流式模式保持静态
-            base = f"{PREFIX} 🟠 等待{self._service_name}响应..."
+            base = f"{PREFIX} 🟠 Ожидание{self._service_name}ответа..."
             if not self._streaming:
                 return base
             
@@ -342,11 +342,11 @@ class ProgressBar:
         
         elif self._state == self.STATE_GENERATING:
             # 流式模式：显示字符数和时间
-            # 静态模式：只显示简单的 "生成中..."
+            # 静态模式：只显示简单的 "Генерация..."
             if self._streaming:
-                return f"{PREFIX} 🔵 生成中 | {self._char_count}字符 | {elapsed}"
+                return f"{PREFIX} 🔵 Генерация | {self._char_count}字符 | {elapsed}"
             else:
-                return f"{PREFIX} 🔵 生成中..."
+                return f"{PREFIX} 🔵 Генерация..."
         
         else:
             return ""
@@ -406,7 +406,7 @@ class ProgressBar:
     
     def set_generating(self, char_count: int = 0) -> None:
         """
-        切换到"生成中"状态
+        切换到"Генерация"状态
         
         参数:
             char_count: 当前字符数
@@ -440,10 +440,10 @@ class ProgressBar:
     
     def done(self, message: str = None, char_count: int = None, elapsed_ms: int = None) -> None:
         """
-        完成请求
+         завершён请求
         
         参数:
-            message: 自定义完成消息（可选）
+            message: 自定义 завершён消息（可选）
             char_count: 最终字符数（可选）
             elapsed_ms: 耗时毫秒（可选，不传则自动计算）
         """
@@ -481,11 +481,11 @@ class ProgressBar:
         # 使用传入的字符数或当前记录的字符数
         final_count = char_count if char_count is not None else self._char_count
         
-        # 生成完成消息
+        # 生成 завершён消息
         if message:
             final_msg = message
         else:
-            final_msg = f"{PREFIX} ✅ 完成 | 服务:{self._service_name} | ID:{self._request_id} | 字符:{final_count} | 耗时:{elapsed}"
+            final_msg = f"{PREFIX} ✅  завершён | сервис:{self._service_name} | ID:{self._request_id} | символов:{final_count} | время:{elapsed}"
         
         # 直接调用 log_complete 的思想：换行输出，不覆盖之前的内容
         print(f"\r{_ANSI_CLEAR_EOL}{final_msg}", flush=True)
@@ -534,7 +534,7 @@ class ProgressBar:
             global _global_last_output_len
             _global_last_output_len = 0
             
-        cancel_msg = message or "任务被取消"
+        cancel_msg = message or "задача отменена"
         
         # 如果提供了 task_type，则使用统一日志
         if hasattr(self, '_task_type') and self._task_type:
@@ -549,7 +549,7 @@ class ProgressBar:
     
     def __exit__(self, *args):
         if not self._closed:
-            # 退出上下文时，如果没有显式调用 done/error，则视为成功完成
+            # 退出上下文时，如果没有显式调用 done/error，则视为成功 завершён
             self.done()
 
     def __del__(self):
@@ -571,7 +571,7 @@ class ProgressBar:
 # HTTP状态码到中文错误信息的映射
 HTTP_STATUS_CODE_MESSAGES = {
     400: "请求无效",
-    401: "身份验证失败-请检查您的API Key是否正确。",
+    401: "身份验证 ошибка-请检查您的API Key是否正确。",
     403: "无权限访问-您没有权限访问此资源。",
     404: "请求的资源不存在",
     429: "请求频率过高-您已超出速率限制，请稍后再试。",
@@ -581,7 +581,7 @@ HTTP_STATUS_CODE_MESSAGES = {
     504: "网关超时",
 }
 
-# 百度翻译API的错误码映射
+# 百度ПереводAPI的错误码映射
 BAIDU_ERROR_CODE_MESSAGES = {
     '52001': '请求超时，请重试',
     '52002': '系统错误，请重试',
@@ -624,7 +624,7 @@ def _is_auth_error(error_text: str) -> bool:
         'missing key',
         'invalid credentials',
         '身份验证',
-        '认证失败',
+        '认证 ошибка',
         'token'
     ]
     return any(keyword in error_text for keyword in auth_keywords)
@@ -667,16 +667,16 @@ def format_api_error(e: Exception, provider_display_name: str) -> str:
                 try:
                     if hasattr(e.response, 'text') and e.response.text:
                         detail_msg = e.response.text[:200]
-                        error_details_str = f" | 原始响应: {detail_msg}"
+                        error_details_str = f" | 原始ответа: {detail_msg}"
                 except Exception:
                     pass
             
             # ---智能识别认证错误并提供友好提示---
             combined_error_text = f"{message} {detail_msg}".lower()
             if status_code == 401 or _is_auth_error(combined_error_text):
-                return f"{provider_display_name} 认证失败: 未配置API Key或API Key无效，请在服务商配置中填写正确的API Key"
+                return f"{provider_display_name} 认证 ошибка: 未配置API Key或API Key无效，请在服务商配置中填写正确的API Key"
                     
-            return f"{provider_display_name} API错误: {message} (状态码: {status_code}){error_details_str}"
+            return f"{provider_display_name} APIошибка: {message} (状态码: {status_code}){error_details_str}"
     except Exception:
         pass
         
@@ -686,7 +686,7 @@ def format_api_error(e: Exception, provider_display_name: str) -> str:
 
 def format_baidu_translate_error(error_data: dict) -> str:
     """
-    格式化百度翻译API的错误信息
+    格式化百度ПереводAPI的错误信息
     
     参数:
         error_data: 百度API返回的错误数据
@@ -695,14 +695,14 @@ def format_baidu_translate_error(error_data: dict) -> str:
         str: 格式化后的错误信息
     """
     if not isinstance(error_data, dict):
-        return "未知的百度翻译错误格式"
+        return "未知的百度Перевод错误格式"
         
     error_code = str(error_data.get('error_code'))
     if error_code in BAIDU_ERROR_CODE_MESSAGES:
-        return f"百度翻译错误: {BAIDU_ERROR_CODE_MESSAGES[error_code]} (代码: {error_code})"
+        return f"百度Переводошибка: {BAIDU_ERROR_CODE_MESSAGES[error_code]} (代码: {error_code})"
     
     error_msg = error_data.get('error_msg', '未知错误')
-    return f"百度翻译错误: {error_msg} (代码: {error_code})"
+    return f"百度Переводошибка: {error_msg} (代码: {error_code})"
 
 
 # ---图像处理函数---
@@ -817,7 +817,7 @@ def preprocess_image(
                     )
                 else:
                     print(
-                        f"{REQUEST_PREFIX} 🟡 图像预处理完成 | "
+                        f"{REQUEST_PREFIX} 🟡 图像预处理 завершён | "
                         f"尺寸:{original_size}→{img.size} | "
                         f"大小:{original_bytes/1024:.1f}KB→{compressed_size/1024:.1f}KB | "
                         f"压缩率:{compression_ratio:.1f}%"
@@ -830,8 +830,8 @@ def preprocess_image(
     
     except Exception as e:
         if not silent:
-            print(f"{WARN_PREFIX} ❌图像预处理失败 | 请求ID:{request_id} | 错误:{str(e)}")
-        # 预处理失败时返回原始图像数据
+            print(f"{WARN_PREFIX} ❌图像预处理 ошибка | 请求ID:{request_id} | ошибка:{str(e)}")
+        # 预处理 ошибка时返回原始图像数据
         return image_data
 
 
