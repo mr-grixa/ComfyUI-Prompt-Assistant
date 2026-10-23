@@ -53,8 +53,12 @@ class DAAMExplorer:
                     "STRING",
                     {
                         "multiline": True,
-                        "forceInput": True,
-                        "tooltip": "The exact prompt that was sampled, BREAK included.",
+                        "default": "",
+                        "tooltip": (
+                            "The exact prompt that was sampled, BREAK included. Wire the "
+                            "same text the CLIPTextEncode got (convert this widget to an "
+                            "input and connect the same source) to be sure the tags line up."
+                        ),
                     },
                 ),
                 "images": ("IMAGE", {"tooltip": "The decoded images."}),
