@@ -284,115 +284,103 @@ class PromptFormatter {
     }
 
     /**
-     * 判断文本的语言类型
+     * RU-форк: определение языка для перевода RU ↔ EN (с фоллбеком ZH).
+     * Кириллица → ru, латиница → en, иероглифы → zh.
      */
     static detectLanguage(text) {
         try {
             if (!text) {
-                return {
-                    from: 'en',
-                    to: 'zh'
-                };
+                return { from: 'en', to: 'ru' };
             }
 
-            // 检查是否包含中文字符
+            const hasCyrillic = /[а-яА-ЯёЁ]/.test(text);
             const hasChineseChars = /[\u4e00-\u9fff]/.test(text);
-            // 检查是否包含英文字符
             const hasEnglishChars = /[a-zA-Z]/.test(text);
 
             let from, to, type;
 
-            if (hasChineseChars && !hasEnglishChars) {
-                // 纯中文
-                from = 'zh';
-                to = 'en';
-                type = '纯中文';
-            } else if (!hasChineseChars && hasEnglishChars) {
-                // 纯英文
-                from = 'en';
-                to = 'zh';
-                type = '纯英文';
+            // Чистые случаи — приоритет RU/EN, ZH фоллбек
+            if (hasCyrillic && !hasEnglishChars && !hasChineseChars) {
+                from = 'ru'; to = 'en'; type = 'чистый русский';
+            } else if (!hasCyrillic && hasEnglishChars && !hasChineseChars) {
+                from = 'en'; to = 'ru'; type = 'чистый английский';
+            } else if (!hasCyrillic && !hasEnglishChars && hasChineseChars) {
+                from = 'zh'; to = 'ru'; type = 'чистый китайский';
             } else {
-                // 混合语言：按中文汉字数量 vs 英文单词数量比较以决定方向
+                // Смешанный — считаем единицы
+                const ruChars = text.match(/[а-яА-ЯёЁ]/g) || [];
                 const cnChars = text.match(/[\u4e00-\u9fff]/g) || [];
                 const enWords = text.match(/[A-Za-z]+(?:['’\-][A-Za-z]+)*/g) || [];
+                // Для RU-форка объединяем китайские и русские иероглифы как "не-английский" если надо, но отдельно считаем
+                // Определяем доминирующий не-английский язык
+                const ruUnits = ruChars.length;
                 const cnUnits = cnChars.length;
                 const enUnits = enWords.length;
+                // Доминирующий локальный язык
+                const localUnits = ruUnits + cnUnits;
+                const hasRuDominant = ruUnits >= cnUnits;
 
-                // 获取混合语言翻译规则
                 const rule = window.FEATURES?.mixedLangTranslateRule || 'auto_minor';
 
-                switch (rule) {
-                    case 'to_zh':
-                        // 固定翻译成中文
-                        from = 'en';
-                        to = 'zh';
-                        type = '混合语言→中文';
+                // Интерпретируем старые правила to_zh как to_ru
+                const effectiveRule = rule === 'to_zh' ? 'to_ru' : rule;
+
+                switch (effectiveRule) {
+                    case 'to_ru':
+                        if (enUnits > 0 && localUnits === 0) { from = 'en'; to = 'ru'; type = 'смешанный→русский'; }
+                        else if (localUnits > 0) { from = hasRuDominant ? 'ru' : 'zh'; to = hasRuDominant ? 'en' : 'ru'; type = hasRuDominant ? 'смешанный→английский' : 'смешанный→русский'; }
+                        else { from = 'en'; to = 'ru'; type = 'смешанный'; }
                         break;
                     case 'to_en':
-                        // 固定翻译成英文
-                        from = 'zh';
+                        from = hasRuDominant ? 'ru' : (hasChineseChars ? 'zh' : 'ru');
                         to = 'en';
-                        type = '混合语言→英文';
+                        type = 'смешанный→английский';
                         break;
                     case 'auto_major':
-                        // 翻译大比例语言
-                        if (cnUnits > enUnits) {
-                            from = 'zh';
-                            to = 'en';
-                            type = '混合语言-翻译中文';
-                        } else if (enUnits > cnUnits) {
-                            from = 'en';
-                            to = 'zh';
-                            type = '混合语言-翻译英文';
+                        if (localUnits > enUnits) {
+                            from = hasRuDominant ? 'ru' : 'zh';
+                            to = hasRuDominant ? 'en' : 'ru';
+                            type = hasRuDominant ? 'смешанный-доминант RU→EN' : 'смешанный-доминант ZH→RU';
+                        } else if (enUnits > localUnits) {
+                            from = 'en'; to = 'ru'; type = 'смешанный-доминант EN→RU';
                         } else {
-                            from = 'zh';
-                            to = 'en';
-                            type = '混合语言';
+                            from = hasRuDominant ? 'ru' : 'en'; to = hasRuDominant ? 'en' : 'ru'; type = 'смешанный';
                         }
                         break;
                     case 'auto_minor':
                     default:
-                        // 翻译小比例语言（原逻辑）
-                        if (cnUnits > enUnits) {
-                            from = 'en';
-                            to = 'zh';
-                            type = '混合语言-翻译英文';
-                        } else if (enUnits > cnUnits) {
-                            from = 'zh';
-                            to = 'en';
-                            type = '混合语言-翻译中文';
+                        if (localUnits > enUnits) {
+                            from = 'en'; to = 'ru'; type = 'смешанный-доминант RU/ZH, переводим EN→RU';
+                        } else if (enUnits > localUnits) {
+                            from = hasRuDominant ? 'ru' : 'zh'; to = hasRuDominant ? 'en' : 'ru'; type = hasRuDominant ? 'смешанный-доминант EN, переводим RU→EN' : 'смешанный-доминант EN, переводим ZH→RU';
                         } else {
-                            from = 'zh';
-                            to = 'en';
-                            type = '混合语言';
+                            from = hasRuDominant ? 'ru' : 'en'; to = hasRuDominant ? 'en' : 'ru'; type = 'смешанный';
                         }
                         break;
                 }
             }
 
-            // 记录日志
-            logger.debug(`语言检测 | 结果:${type} | 翻译方向:${from}→${to}`);
-
+            logger.debug(`Определение языка | ${type} | ${from}→${to}`);
             return { from, to };
 
         } catch (error) {
-            logger.error(`语言检测 | 结果:异常 | 错误:${error.message}`);
-            return {
-                from: 'en',
-                to: 'zh'
-            };
+            logger.error(`Определение языка | ошибка: ${error.message}`);
+            return { from: 'en', to: 'ru' };
         }
     }
 
-    /**
-     * 判断是否为中英文混合文本
-     */
     static isMixedChineseEnglish(text) {
         if (!text) return false;
         const hasChinese = /[\u4e00-\u9fff]/.test(text);
+        const hasCyrillic = /[а-яА-ЯёЁ]/.test(text);
         const hasEnglish = /[A-Za-z]/.test(text);
-        return hasChinese && hasEnglish;
+        return (hasChinese && hasEnglish) || (hasCyrillic && hasEnglish) || (hasChinese && hasCyrillic);
+    }
+    static isMixedRussianEnglish(text) {
+        if (!text) return false;
+        const hasCyrillic = /[а-яА-ЯёЁ]/.test(text);
+        const hasEnglish = /[A-Za-z]/.test(text);
+        return hasCyrillic && hasEnglish;
     }
 }
 

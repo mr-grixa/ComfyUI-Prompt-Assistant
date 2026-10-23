@@ -86,12 +86,12 @@ async def set_streaming_progress_setting(request):
         _streaming_progress_enabled = data.get("enabled", True)
         return web.json_response({"success": True})
     except Exception as e:
-        print(f"{ERROR_PREFIX} 更新流式进度设置失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка обновления настройки потокового вывода: {str(e)}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.get(f'{API_PREFIX}/config/baidu_translate')
 async def get_baidu_translate_config(request):
-    """获取百度翻译配置"""
+    """获取Baidu Translate配置"""
     config = config_manager.get_baidu_translate_config()
     return web.json_response(config)
 
@@ -160,7 +160,7 @@ async def get_services_list(request):
             "services": safe_services
         })
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取服务商列表失败 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения списка провайдеров | 错误:{str(e)}")
         return web.json_response({
             "success": False,
             "error": str(e)
@@ -197,7 +197,7 @@ async def get_service_masked(request):
             "service": safe_service
         })
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取服务商配置失败 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения конфигурации провайдера | 错误:{str(e)}")
         return web.json_response({
             "success": False,
             "error": str(e)
@@ -221,7 +221,7 @@ async def create_service(request):
         if not service_type or not name:
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数: type 和 name"
+                "error": "Отсутствуют обязательные параметры: type 和 name"
             }, status=400)
         
         service_id = config_manager.create_service(
@@ -233,7 +233,7 @@ async def create_service(request):
         )
         
         if service_id:
-            print(f"{PREFIX} 成功创建服务商 | 名称:{name} | ID:{service_id}")
+            print(f"{PREFIX} Провайдер успешно создан | 名称:{name} | ID:{service_id}")
             return web.json_response({
                 "success": True,
                 "service_id": service_id
@@ -241,7 +241,7 @@ async def create_service(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "创建服务商失败"
+                "error": "Ошибка создания провайдера"
             }, status=500)
             
     except Exception as e:
@@ -266,12 +266,12 @@ async def update_service_config(request):
         success = config_manager.update_service(service_id, **data)
         
         if success:
-            print(f"{PREFIX} 成功更新服务商 | ID:{service_id}")
+            print(f"{PREFIX} Провайдер успешно обновлён | ID:{service_id}")
             return web.json_response({"success": True})
         else:
             return web.json_response({
                 "success": False,
-                "error": "更新服务商失败"
+                "error": "Ошибка обновления провайдера"
             }, status=500)
             
     except Exception as e:
@@ -292,12 +292,12 @@ async def delete_service(request):
         success = config_manager.delete_service(service_id)
         
         if success:
-            print(f"{PREFIX} 成功删除服务商 | ID:{service_id}")
+            print(f"{PREFIX} Провайдер успешно удалён | ID:{service_id}")
             return web.json_response({"success": True})
         else:
             return web.json_response({
                 "success": False,
-                "error": "删除服务商失败"
+                "error": "Ошибка удаления провайдера"
             }, status=500)
             
     except Exception as e:
@@ -328,7 +328,7 @@ async def get_service(request):
             }, status=404)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取服务商失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения провайдера: {str(e)}")
         return web.json_response({
             "success": False,
             "error": str(e)
@@ -350,7 +350,7 @@ async def set_current_service_api(request):
         if not service_type or not service_id:
             return web.json_response({
                 "success": False,
-                "error": "缺少必要参数: service_type 和 service_id"
+                "error": "Отсутствуют обязательные параметры: service_type 和 service_id"
             }, status=400)
         
         if service_type not in ['llm', 'vlm', 'translate']:
@@ -412,7 +412,7 @@ async def get_service_models(request):
         # 检查是否成功
         if not result.get('success'):
             error_msg = result.get('error', '未知错误')
-            print(f"{ERROR_PREFIX} 获取模型列表失败: {error_msg}")
+            print(f"{ERROR_PREFIX} Ошибка получения списка моделей: {error_msg}")
             return web.json_response({
                 "success": False,
                 "error": error_msg
@@ -422,7 +422,7 @@ async def get_service_models(request):
         
         # 统计模型总数(LLM和VLM列表相同,只统计一个)
         total_count = len(models.get('llm', []))
-        print(f"{PREFIX} 模型列表获取成功 | 共 {total_count} 个模型")
+        print(f"{PREFIX} Список моделей получен | всего {total_count} моделей")
         
         return web.json_response({
             "success": True,
@@ -430,7 +430,7 @@ async def get_service_models(request):
         })
         
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取模型列表失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения списка моделей: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -459,7 +459,7 @@ async def add_model_to_service_api(request):
         if not model_type or not model_name:
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数: model_type 和 model_name"
+                "error": "Отсутствуют обязательные параметры: model_type 和 model_name"
             }, status=400)
         
         success = config_manager.add_model_to_service(
@@ -471,11 +471,11 @@ async def add_model_to_service_api(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "添加模型失败"
+                "error": "Ошибка добавления модели"
             }, status=500)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 添加模型失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка добавления модели: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -501,11 +501,11 @@ async def delete_model_from_service_api(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "删除模型失败"
+                "error": "Ошибка удаления модели"
             }, status=500)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 删除模型失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка удаления модели: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -531,7 +531,7 @@ async def set_default_model_api(request):
         if not model_type or not model_name:
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数: model_type 和 model_name"
+                "error": "Отсутствуют обязательные параметры: model_type 和 model_name"
             }, status=400)
         
         success = config_manager.set_default_model(service_id, model_type, model_name)
@@ -541,11 +541,11 @@ async def set_default_model_api(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "设置默认模型失败"
+                "error": "Ошибка установки модели по умолчанию"
             }, status=500)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 设置默认模型失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка установки модели по умолчанию: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -571,7 +571,7 @@ async def update_model_order_api(request):
         if not model_type:
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数: model_type"
+                "error": "Отсутствуют обязательные параметры: model_type"
             }, status=400)
         
         success = config_manager.update_model_order(service_id, model_type, model_names)
@@ -581,11 +581,11 @@ async def update_model_order_api(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "更新模型顺序失败"
+                "error": "Ошибка обновления порядка моделей"
             }, status=500)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 更新模型顺序失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка обновления порядка моделей: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -608,22 +608,22 @@ async def update_services_order_api(request):
         if not service_ids:
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数: service_ids"
+                "error": "Отсутствуют обязательные параметры: service_ids"
             }, status=400)
 
         success = config_manager.update_services_order(service_ids)
 
         if success:
-            print(f"{PREFIX} 成功更新服务商顺序 | 顺序:{', '.join(service_ids)}")
+            print(f"{PREFIX} Провайдер успешно обновлён顺序 | 顺序:{', '.join(service_ids)}")
             return web.json_response({"success": True})
         else:
             return web.json_response({
                 "success": False,
-                "error": "更新服务商顺序失败"
+                "error": "Ошибка обновления порядка провайдеров"
             }, status=500)
 
     except Exception as e:
-        print(f"{ERROR_PREFIX} 更新服务商顺序失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка обновления порядка провайдеров: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -651,7 +651,7 @@ async def update_model_parameter_api(request):
         if not all([model_type, model_name, parameter_name, parameter_value is not None]):
             return web.json_response({
                 "success": False,
-                "error": "缺少必需参数"
+                "error": "Отсутствуют обязательные параметры"
             }, status=400)
         
         success = config_manager.update_model_parameter(
@@ -663,11 +663,11 @@ async def update_model_parameter_api(request):
         else:
             return web.json_response({
                 "success": False,
-                "error": "更新模型参数失败"
+                "error": "Ошибка обновления параметров модели"
             }, status=500)
             
     except Exception as e:
-        print(f"{ERROR_PREFIX} 更新模型参数失败: {str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка обновления параметров модели: {str(e)}")
         import traceback
         traceback.print_exc()
         return web.json_response({
@@ -758,8 +758,8 @@ async def update_user_tags_config(request):
         
         # 检查数据结构是否正确
         if not isinstance(data, dict):
-            print(f"{ERROR_PREFIX} 用户标签配置更新失败 | 错误:参数格式错误")
-            return web.json_response({"error": "参数格式错误"}, status=400)
+            print(f"{ERROR_PREFIX} Ошибка обновления пользовательских тегов | 错误:Ошибка формата параметров")
+            return web.json_response({"error": "Ошибка формата параметров"}, status=400)
         
         # 使用配置管理器保存用户标签
         success = config_manager.save_user_tags(data)
@@ -767,7 +767,7 @@ async def update_user_tags_config(request):
         if success:
             return web.json_response({"success": True})
         else:
-            print(f"{ERROR_PREFIX} 用户标签配置文件更新失败")
+            print(f"{ERROR_PREFIX} Ошибка обновления файла пользовательских тегов")
             return web.json_response({"error": "保存失败"}, status=500)
             
     except Exception as e:
@@ -783,7 +783,7 @@ async def get_tags_files(request):
         files = config_manager.list_tags_files()
         return web.json_response({"success": True, "files": files})
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取标签文件列表失败 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения списка файлов тегов | 错误:{str(e)}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.get(f'{API_PREFIX}/config/tags_csv/{{filename}}')
@@ -828,7 +828,7 @@ async def get_tags_selection(request):
         selection = config_manager.get_tags_selection()
         return web.json_response({"success": True, "selection": selection})
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取标签选择失败 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения выбора тегов | 错误:{str(e)}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/config/tags_selection')
@@ -852,7 +852,7 @@ async def get_favorites(request):
         favorites = config_manager.get_favorites()
         return web.json_response({"success": True, "favorites": favorites})
     except Exception as e:
-        print(f"{ERROR_PREFIX} 获取收藏列表失败 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Ошибка получения избранного | 错误:{str(e)}")
         return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/config/favorites/add')
@@ -896,7 +896,7 @@ async def remove_favorite(request):
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/config/baidu_translate')
 async def update_baidu_translate_config(request):
-    """更新百度翻译配置"""
+    """更新Baidu Translate配置"""
     try:
         data = await request.json()
         app_id = data.get('app_id')
@@ -922,10 +922,10 @@ async def update_baidu_translate_config(request):
         if success:
             return web.json_response({'message': '配置已更新'})
         else:
-            print(f"{ERROR_PREFIX} 百度翻译配置更新失败")
-            return web.json_response({'error': '配置更新失败'}, status=500)
+            print(f"{ERROR_PREFIX} Ошибка обновления конфигурации Baidu")
+            return web.json_response({'error': 'Ошибка обновления конфигурации'}, status=500)
     except Exception as e:
-        print(f"{ERROR_PREFIX} 百度翻译配置更新异常 | 错误:{str(e)}")
+        print(f"{ERROR_PREFIX} Baidu Translate配置更新异常 | 错误:{str(e)}")
         return web.json_response({'error': str(e)}, status=500)
 
 @PromptServer.instance.routes.post(f'{API_PREFIX}/config/system_prompts')
@@ -936,8 +936,8 @@ async def update_system_prompts_config(request):
         
         # 检查数据结构是否正确
         if not isinstance(data, dict):
-            print(f"{ERROR_PREFIX} 系统提示词配置更新失败 | 错误:参数格式错误")
-            return web.json_response({'error': '参数格式错误'}, status=400)
+            print(f"{ERROR_PREFIX} 系统提示词Ошибка обновления конфигурации | 错误:Ошибка формата параметров")
+            return web.json_response({'error': 'Ошибка формата параметров'}, status=400)
             
         # 前端会直接发送包含 active_prompts 的完整配置，后端只需验证并保存
         if 'active_prompts' not in data:
@@ -978,8 +978,8 @@ async def update_system_prompts_config(request):
             
             return web.json_response({'success': True})
         else:
-            print(f"{ERROR_PREFIX} 系统提示词配置更新失败")
-            return web.json_response({'error': '配置更新失败'}, status=500)
+            print(f"{ERROR_PREFIX} 系统提示词Ошибка обновления конфигурации")
+            return web.json_response({'error': 'Ошибка обновления конфигурации'}, status=500)
     except Exception as e:
         print(f"{ERROR_PREFIX} 系统提示词配置更新异常 | 错误:{str(e)}")
         return web.json_response({'error': str(e)}, status=500)
@@ -1006,8 +1006,8 @@ async def update_active_prompt_config(request):
             
             return web.json_response({'success': True})
         else:
-            print(f"{ERROR_PREFIX} 激活的提示词更新失败")
-            return web.json_response({'error': '配置更新失败'}, status=500)
+            print(f"{ERROR_PREFIX} Ошибка обновления активных промптов")
+            return web.json_response({'error': 'Ошибка обновления конфигурации'}, status=500)
     except Exception as e:
         print(f"{ERROR_PREFIX} 激活的提示词更新异常 | 错误:{str(e)}")
         return web.json_response({'error': str(e)}, status=500)
@@ -1022,7 +1022,7 @@ async def update_llm_config(request):
         
         # 确保至少有一个参数提供
         if not current_provider and not providers:
-            print(f"{ERROR_PREFIX} LLM配置更新失败 | 错误:参数不能全为空")
+            print(f"{ERROR_PREFIX} LLMОшибка обновления конфигурации | 错误:参数不能全为空")
             return web.json_response({'error': '参数不能全为空'}, status=400)
             
         success = True
@@ -1066,8 +1066,8 @@ async def update_llm_config(request):
             print(f"{PREFIX} LLM配置更新成功")
             return web.json_response({'success': True})
         else:
-            print(f"{ERROR_PREFIX} LLM配置更新失败")
-            return web.json_response({'error': '配置更新失败'}, status=500)
+            print(f"{ERROR_PREFIX} LLMОшибка обновления конфигурации")
+            return web.json_response({'error': 'Ошибка обновления конфигурации'}, status=500)
             
     except Exception as e:
         print(f"{ERROR_PREFIX} LLM配置更新异常 | 错误:{str(e)}")
@@ -1083,7 +1083,7 @@ async def update_vision_config(request):
         
         # 确保至少有一个参数提供
         if not current_provider and not providers:
-            print(f"{ERROR_PREFIX} 视觉模型配置更新失败 | 错误:参数不能全为空")
+            print(f"{ERROR_PREFIX} 视觉模型Ошибка обновления конфигурации | 错误:参数不能全为空")
             return web.json_response({'error': '参数不能全为空'}, status=400)
             
         success = True
@@ -1127,8 +1127,8 @@ async def update_vision_config(request):
             print(f"{PREFIX} 视觉模型配置更新成功")
             return web.json_response({'success': True})
         else:
-            print(f"{ERROR_PREFIX} 视觉模型配置更新失败")
-            return web.json_response({'error': '配置更新失败'}, status=500)
+            print(f"{ERROR_PREFIX} 视觉模型Ошибка обновления конфигурации")
+            return web.json_response({'error': 'Ошибка обновления конфигурации'}, status=500)
             
     except Exception as e:
         print(f"{ERROR_PREFIX} 视觉模型配置更新异常 | 错误:{str(e)}")
@@ -1142,7 +1142,7 @@ async def cancel_request(request):
         request_id = data.get("request_id")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         task = ACTIVE_TASKS.get(request_id)
         if task and not task.done():
@@ -1163,7 +1163,7 @@ async def cancel_request(request):
 @PromptServer.instance.routes.post(f'{API_PREFIX}/baidu/translate')
 async def baidu_translate(request):
     """
-    百度翻译API
+    Baidu TranslateAPI
     注意：所有的格式处理（包括序号"1."格式保护等）均由前端的promptFormatter.js负责，
     后端只负责原始文本的翻译，不进行格式预处理或后处理。
     """
@@ -1177,7 +1177,7 @@ async def baidu_translate(request):
         is_auto = data.get("is_auto", False)
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
         
         # 准备阶段日志
         # 语言显示文字映射
@@ -1188,7 +1188,7 @@ async def baidu_translate(request):
         }
         from_lang_name = lang_names.get(from_lang, from_lang)
         to_lang_name = lang_names.get(to_lang, to_lang)
-        log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, "百度翻译", None, None, {"方向": f"{from_lang_name}→{to_lang_name}", "长度": len(text)})
+        log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, "Baidu Translate", None, None, {"方向": f"{from_lang_name}→{to_lang_name}", "长度": len(text)})
         
         # 创建并注册任务
         task = asyncio.create_task(BaiduTranslateService.translate(text, from_lang, to_lang, request_id, is_auto, task_type=TASK_TRANSLATE, source=SOURCE_FRONTEND))
@@ -1199,11 +1199,11 @@ async def baidu_translate(request):
         # 服务层已输出错误日志，此处不再重复输出
         return web.json_response(result)
     except asyncio.CancelledError:
-        print(f"\r{_ANSI_CLEAR_EOL}{WARN_PREFIX} 百度翻译任务被取消 | ID:{request_id}", flush=True)
+        print(f"\r{_ANSI_CLEAR_EOL}{WARN_PREFIX} Baidu Translate任务被取消 | ID:{request_id}", flush=True)
         return web.json_response({"success": False, "error": "请求已取消", "cancelled": True}, status=400)
     except Exception as e:
         error_msg = str(e)
-        print(f"{ERROR_PREFIX} 百度翻译请求异常 | 错误:{error_msg}")
+        print(f"{ERROR_PREFIX} Baidu Translate请求异常 | 错误:{error_msg}")
         return web.json_response({"success": False, "error": error_msg})
     finally:
         if request_id and request_id in ACTIVE_TASKS:
@@ -1227,7 +1227,7 @@ async def free_translate(request):
         chain = data.get("chain", None)  # опционально: список провайдеров
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # Языки для логов (русские названия)
         lang_names = {
@@ -1298,7 +1298,7 @@ async def llm_expand(request):
         request_id = data.get("request_id")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # 准备阶段日志
         from .services.thinking_control import build_thinking_suppression
@@ -1365,7 +1365,7 @@ async def llm_translate(request):
         is_auto = data.get("is_auto", False)
         
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # 准备阶段日志
         from .services.thinking_control import build_thinking_suppression
@@ -1457,7 +1457,7 @@ async def vlm_analyze(request):
         prompt_content = data.get("prompt")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # 准备阶段日志
         from .services.thinking_control import build_thinking_suppression
@@ -1547,7 +1547,7 @@ async def vlm_analyze_stream(request):
         prompt_content = data.get("prompt")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # 创建 SSE 响应
         response = web.StreamResponse(
@@ -1677,7 +1677,7 @@ async def llm_expand_stream(request):
         request_id = data.get("request_id")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         # 创建 SSE 响应
         response = web.StreamResponse(
@@ -1794,7 +1794,7 @@ async def llm_translate_stream(request):
     """
     LLM翻译API（流式版本）
     使用 Server-Sent Events (SSE) 逐 token 推送翻译结果
-    注意：仅支持LLM翻译，百度翻译不支持流式，请使用原有接口
+    注意：仅支持LLM翻译，Baidu Translate不支持流式，请使用原有接口
     """
     request_id = None
     response = None
@@ -1806,10 +1806,10 @@ async def llm_translate_stream(request):
         request_id = data.get("request_id")
 
         if not request_id:
-            return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует request_id"}, status=400)
 
         if not text or text.strip() == '':
-            return web.json_response({"success": False, "error": "缺少翻译文本"}, status=400)
+            return web.json_response({"success": False, "error": "Отсутствует текст для перевода"}, status=400)
 
         # 创建 SSE 响应
         response = web.StreamResponse(

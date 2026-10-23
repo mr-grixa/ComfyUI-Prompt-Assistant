@@ -822,31 +822,32 @@ export async function registerSettings() {
                 // 混合语言缓存选项
                 {
                     id: "PromptAssistant.Features.CacheMixedLangTranslation",
-                    name: "混合语言翻译进行缓存",
-                    category: ["✨提示词小助手", " 翻译功能设置", "混合语言缓存"],
+                    name: "Кэшировать смешанный язык",
+                    category: ["✨Помощник промптов", " Настройки перевода", "Кэш смешанного языка"],
                     type: "boolean",
                     defaultValue: false,
-                    tooltip: "关闭时，中英文混合内容的翻译结果不会写入缓存，避免污染缓存。开启后会正常缓存。",
+                    tooltip: "Если выкл — результаты перевода смешанного RU+EN не пишутся в кэш. Если вкл — кэшируется.",
                     onChange: (value) => {
                         FEATURES.cacheMixedLangTranslation = value;
-                        logger.log(`混合语言缓存 - 已${value ? "启用" : "禁用"}`);
+                        logger.log(`Кэш смешанного языка - ${value ? "вкл" : "выкл"}`);
                     }
                 },
 
                 // 混合语言翻译规则
                 {
                     id: "PromptAssistant.Features.MixedLangTranslateRule",
-                    name: "混合语言翻译规则",
-                    category: ["✨提示词小助手", " 翻译功能设置", "混合语言规则"],
+                    name: "Правило для смешанного языка",
+                    category: ["✨Помощник промптов", " Настройки перевода", "Смешанный язык"],
                     type: "combo",
                     options: [
-                        { text: "翻译成英文", value: "to_en" },
-                        { text: "翻译成中文", value: "to_zh" },
-                        { text: "自动翻译小比例语言", value: "auto_minor" },
-                        { text: "自动翻译大比例语言", value: "auto_major" }
+                        { text: "Переводить в английский", value: "to_en" },
+                        { text: "Переводить в русский", value: "to_ru" },
+                        { text: "Переводить в русский (совм. to_zh)", value: "to_zh" },
+                        { text: "Авто — переводить меньшинство", value: "auto_minor" },
+                        { text: "Авто — переводить большинство", value: "auto_major" }
                     ],
-                    defaultValue: "to_en",
-                    tooltip: "根据个人使用偏好设置混合中英文内容的翻译规则",
+                    defaultValue: "auto_minor",
+                    tooltip: "Как переводить текст где есть и русский и английский",
                     onChange: (value) => {
                         FEATURES.mixedLangTranslateRule = value;
                         logger.log(`混合语言翻译规则 - 已设置为:${value}`);
