@@ -57,8 +57,8 @@ class PromptTranslate(LLMNodeBase, io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "target_language",
-                    options=["English", "Chinese"],
-                    default="English",
+                    options=["Русский", "English", "中文"],
+                    default="Русский",
                 ),
                 io.Combo.Input(
                     "translate_service",
@@ -113,28 +113,29 @@ class PromptTranslate(LLMNodeBase, io.ComfyNode):
 
     @classmethod
     def _contains_chinese(cls, text: str) -> bool:
-        """检查文本是否包含中文字符"""
         if not text:
             return False
         return bool(re.search('[\u4e00-\u9fa5]', text))
 
     @classmethod
+    def _contains_cyrillic(cls, text: str) -> bool:
+        if not text:
+            return False
+        return bool(re.search('[а-яА-ЯёЁ]', text))
+
+    @classmethod
     def _detect_language(cls, text: str) -> str:
-        """自动检测文本语言"""
+        """Автоопределение языка: ru / en / zh / auto"""
         if not text:
             return "auto"
-
-        # 检查是否为纯英文（只包含 ASCII 可打印字符）
-        is_pure_english = bool(re.fullmatch(r'[ -~]+', text))
-        # 检查是否包含中文字符
-        contains_chinese = cls._contains_chinese(text)
-
-        if contains_chinese:
+        if cls._contains_cyrillic(text):
+            return "ru"
+        if cls._contains_chinese(text):
             return "zh"
-        elif is_pure_english:
+        is_pure_english = bool(re.fullmatch(r'[ -~]+', text))
+        if is_pure_english:
             return "en"
-        else:
-            return "auto"
+        return "auto"
 
     @classmethod
     def _translate_with_baidu(cls, text, from_lang, to_lang, service_name, from_lang_name, to_lang_name, unique_id):
@@ -248,24 +249,31 @@ class PromptTranslate(LLMNodeBase, io.ComfyNode):
 
             # 自动检测源语言
             detected_lang = cls._detect_language(source_text)
-            to_lang = "en" if target_language == "English" else "zh"
+            if target_language == "English":
+                to_lang = "en"
+            elif target_language == "Русский":
+                to_lang = "ru"
+            else:
+                to_lang = "zh"
 
-            # 智能跳过翻译逻辑
             skip_translation = False
             if to_lang == 'en' and detected_lang == 'en':
                 from ..utils.common import _ANSI_CLEAR_EOL
-                print(f"\r{_ANSI_CLEAR_EOL}{cls.REQUEST_PREFIX} 检测到英文输入，目标为英文，无需翻译", flush=True)
+                print(f"\r{_ANSI_CLEAR_EOL}{cls.REQUEST_PREFIX} Обнаружен английский ввод, цель — английский, пропуск", flush=True)
+                skip_translation = True
+            elif to_lang == 'ru' and detected_lang == 'ru':
+                from ..utils.common import _ANSI_CLEAR_EOL
+                print(f"\r{_ANSI_CLEAR_EOL}{cls.REQUEST_PREFIX} Обнаружен русский ввод, цель — русский, пропуск", flush=True)
                 skip_translation = True
             elif to_lang == 'zh' and detected_lang == 'zh':
                 from ..utils.common import _ANSI_CLEAR_EOL
-                print(f"\r{_ANSI_CLEAR_EOL}{cls.REQUEST_PREFIX} 检测到中文输入，目标为中文，无需翻译", flush=True)
+                print(f"\r{_ANSI_CLEAR_EOL}{cls.REQUEST_PREFIX} Обнаружен китайский ввод, цель — китайский, пропуск", flush=True)
                 skip_translation = True
 
             if skip_translation:
                 return io.NodeOutput(source_text)
 
-            # 映射语言名称
-            lang_map = {'zh': '中文', 'en': '英文', 'auto': '原文'}
+            lang_map = {'zh': 'китайский', 'en': 'английский', 'ru': 'русский', 'auto': 'оригинал'}
             from_lang_name = lang_map.get(detected_lang, detected_lang)
             to_lang_name = lang_map.get(to_lang, to_lang)
 
