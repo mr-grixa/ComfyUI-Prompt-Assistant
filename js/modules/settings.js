@@ -823,7 +823,7 @@ export async function registerSettings() {
                 {
                     id: "PromptAssistant.Features.CacheMixedLangTranslation",
                     name: "Кэшировать смешанный язык",
-                    category: ["✨Помощник промптов", " Настройки перевода", "Кэш смешанного языка"],
+                    category: ["✨提示词小助手", " 翻译功能设置", "混合语言缓存"],
                     type: "boolean",
                     defaultValue: false,
                     tooltip: "Если выкл — результаты перевода смешанного RU+EN не пишутся в кэш. Если вкл — кэшируется.",
@@ -837,7 +837,7 @@ export async function registerSettings() {
                 {
                     id: "PromptAssistant.Features.MixedLangTranslateRule",
                     name: "Правило для смешанного языка",
-                    category: ["✨Помощник промптов", " Настройки перевода", "Смешанный язык"],
+                    category: ["✨提示词小助手", " 翻译功能设置", "混合语言规则"],
                     type: "combo",
                     options: [
                         { text: "Переводить в английский", value: "to_en" },
